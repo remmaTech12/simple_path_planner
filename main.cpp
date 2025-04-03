@@ -6,7 +6,7 @@
 struct Pose2D {
     double x;
     double y;
-    double theta; // heading in radians
+    double theta;
 };
 
 struct Velocity {
@@ -47,7 +47,6 @@ void updatePose(Pose2D& pose, const Velocity& cmd, double dt) {
     pose.theta = normalizeAngle(pose.theta);
 }
 
-// 描画用の座標変換（メートル→ピクセル）
 cv::Point2i toPixel(const Pose2D& pose, int scale, int offsetX, int offsetY) {
     return cv::Point2i(
         static_cast<int>(pose.x * scale) + offsetX,
@@ -55,20 +54,48 @@ cv::Point2i toPixel(const Pose2D& pose, int scale, int offsetX, int offsetY) {
     );
 }
 
-int main() {
-    std::vector<Pose2D> path = {
-        {0, 0, 0},       // start
-        {-1.0, 0.5, 0},   // intermediate
-        {1.0, 1.0, 0}    // goal
+void drawRobotPolygon(cv::Mat& canvas, const Pose2D& pose, int scale, int offsetX, int offsetY) {
+    std::vector<cv::Point> shape_local = {
+        {  20,   0  },  // Front
+        {  12,  12  },
+        { -12,  12  },
+        { -12, -12  },
+        {  12, -12  },
     };
 
-    Pose2D robot = {0, 0, 0};
+    std::vector<cv::Point> shape_world;
+
+    double cos_theta = std::cos(pose.theta);
+    double sin_theta = std::sin(pose.theta);
+
+    for (const auto& p : shape_local) {
+        double x_rot = p.x * cos_theta - p.y * sin_theta;
+        double y_rot = p.x * sin_theta + p.y * cos_theta;
+
+        int x = static_cast<int>(pose.x * scale + x_rot) + offsetX;
+        int y = static_cast<int>(pose.y * scale + y_rot) + offsetY;
+
+        shape_world.emplace_back(x, y);
+    }
+
+    const cv::Point* pts = shape_world.data();
+    int npts = static_cast<int>(shape_world.size());
+    cv::polylines(canvas, &pts, &npts, 1, true, cv::Scalar(0, 0, 0), 2);
+    cv::fillPoly(canvas, &pts, &npts, 1, cv::Scalar(0, 0, 0));
+}
+
+int main() {
+    std::vector<Pose2D> path = {
+        {0, 0, 0},
+        {1.0, 1.0, 0}
+    };
+
+    Pose2D robot = {-1.0, -1.0, 0};
     double dt = 0.1;
     const double threshold = 0.05;
-    size_t target_index = 1;
+    size_t target_index = 0;
 
-    // OpenCV ウィンドウ準備
-    const int scale = 200; // 1m = 200px
+    const int scale = 200;
     const int width = 600, height = 600;
     const int offsetX = width / 2, offsetY = height / 2;
     cv::Mat canvas(height, width, CV_8UC3, cv::Scalar(255, 255, 255));
@@ -90,31 +117,22 @@ int main() {
         Velocity cmd = computeVelocity(robot, target);
         updatePose(robot, cmd, dt);
 
-        // 軌跡を保存
         trajectory.push_back(toPixel(robot, scale, offsetX, offsetY));
+        canvas = cv::Scalar(255, 255, 255);
 
-        // 画面描画
-        canvas = cv::Scalar(255, 255, 255); // 画面クリア
-
-        // 軌跡描画
         for (size_t i = 1; i < trajectory.size(); ++i) {
             cv::line(canvas, trajectory[i - 1], trajectory[i], cv::Scalar(0, 0, 255), 2);
         }
 
-        // ロボット描画
-        cv::circle(canvas, toPixel(robot, scale, offsetX, offsetY), 5, cv::Scalar(0, 0, 0), -1);
-
-        // ターゲット描画
+        drawRobotPolygon(canvas, robot, scale, offsetX, offsetY);
         cv::circle(canvas, toPixel(target, scale, offsetX, offsetY), 5, cv::Scalar(0, 255, 0), -1);
 
-        // 表示
         cv::imshow("Robot Path", canvas);
         int key = cv::waitKey(50);
-        if (key == 27) break; // ESCで終了
+        if (key == 27) break;
     }
 
     std::cout << "Reached goal!" << std::endl;
     cv::waitKey(0);
     return 0;
 }
-
