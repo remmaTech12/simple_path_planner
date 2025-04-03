@@ -1,7 +1,12 @@
 #include <opencv2/opencv.hpp>
+#include <ompl/base/spaces/ReedsSheppStateSpace.h>
+#include <ompl/base/ScopedState.h>
+#include <ompl/config.h>
 #include <iostream>
 #include <vector>
 #include <cmath>
+
+namespace ob = ompl::base;
 
 struct Pose2D {
     double x;
@@ -21,7 +26,7 @@ double normalizeAngle(double angle) {
 }
 
 Velocity computeVelocity(const Pose2D& current, const Pose2D& target) {
-    const double K_linear = 0.5;
+    const double K_linear = 0.8;
     const double K_angular = 2.0;
 
     double dx = target.x - current.x;
@@ -84,16 +89,49 @@ void drawRobotPolygon(cv::Mat& canvas, const Pose2D& pose, int scale, int offset
     cv::fillPoly(canvas, &pts, &npts, 1, cv::Scalar(0, 0, 0));
 }
 
-int main() {
-    std::vector<Pose2D> path = {
-        {0, 0, 0},
-        {1.0, 1.0, 0}
-    };
+std::vector<Pose2D> generateReedsSheppPath(Pose2D start, Pose2D goal, double step_size = 0.1) {
+    auto space = std::make_shared<ob::ReedsSheppStateSpace>(1.0);
 
-    Pose2D robot = {-1.0, -1.0, 0};
+    ob::RealVectorBounds bounds(2);
+    bounds.setLow(-10);
+    bounds.setHigh(10);
+    space->setBounds(bounds);
+
+    ob::ScopedState<> s(space), g(space);
+    s[0] = start.x; s[1] = start.y; s[2] = start.theta;
+    g[0] = goal.x;  g[1] = goal.y;  g[2] = goal.theta;
+
+    ob::ReedsSheppStateSpace::ReedsSheppPath rs_path = space->reedsShepp(s(), g());
+    double length = rs_path.length();
+
+    std::vector<Pose2D> result;
+    for (double t = 0; t <= length; t += step_size) {
+        ob::State *interpolated = space->allocState();
+        space->interpolate(s(), g(), t / length, interpolated);
+
+        const auto *se2 = interpolated->as<ob::SE2StateSpace::StateType>();
+        Pose2D pose;
+        pose.x = se2->getX();
+        pose.y = se2->getY();
+        pose.theta = se2->getYaw();
+        result.push_back(pose);
+
+        space->freeState(interpolated);
+    }
+
+    return result;
+}
+
+int main() {
+    Pose2D start = {-1.0, -1.0, M_PI / 2.0};
+    Pose2D goal  = {1.0, 1.0, 0.0};
+
+    std::vector<Pose2D> path = generateReedsSheppPath(start, goal);
+
+    Pose2D robot = start;
     double dt = 0.1;
-    const double threshold = 0.05;
-    size_t target_index = 0;
+    const double position_threshold = 0.05;
+    const double angle_threshold = 0.05;
 
     const int scale = 200;
     const int width = 600, height = 600;
@@ -101,21 +139,30 @@ int main() {
     cv::Mat canvas(height, width, CV_8UC3, cv::Scalar(255, 255, 255));
 
     std::vector<cv::Point> trajectory;
+    size_t target_index = 0;
 
-    while (target_index < path.size()) {
-        Pose2D target = path[target_index];
-        double dx = target.x - robot.x;
-        double dy = target.y - robot.y;
-        double dist = std::hypot(dx, dy);
+    while (true) {
+        if (target_index >= path.size()) {
+            double angle_error = normalizeAngle(goal.theta - robot.theta);
+            if (std::abs(angle_error) < angle_threshold) break;
 
-        if (dist < threshold) {
-            std::cout << "Reached waypoint " << target_index << std::endl;
-            target_index++;
-            continue;
+            Velocity cmd;
+            cmd.linear = 0.0;
+            cmd.angular = std::min(std::max(2.0 * angle_error, -1.0), 1.0);
+            updatePose(robot, cmd, dt);
+        } else {
+            Pose2D target = path[target_index];
+            double dx = target.x - robot.x;
+            double dy = target.y - robot.y;
+            double dist = std::hypot(dx, dy);
+
+            if (dist < position_threshold) {
+                target_index++;
+            } else {
+                Velocity cmd = computeVelocity(robot, target);
+                updatePose(robot, cmd, dt);
+            }
         }
-
-        Velocity cmd = computeVelocity(robot, target);
-        updatePose(robot, cmd, dt);
 
         trajectory.push_back(toPixel(robot, scale, offsetX, offsetY));
         canvas = cv::Scalar(255, 255, 255);
@@ -125,14 +172,11 @@ int main() {
         }
 
         drawRobotPolygon(canvas, robot, scale, offsetX, offsetY);
-        cv::circle(canvas, toPixel(target, scale, offsetX, offsetY), 5, cv::Scalar(0, 255, 0), -1);
-
-        cv::imshow("Robot Path", canvas);
-        int key = cv::waitKey(50);
-        if (key == 27) break;
+        cv::imshow("Reeds-Shepp Path Tracking", canvas);
+        if (cv::waitKey(30) == 27) break;
     }
 
-    std::cout << "Reached goal!" << std::endl;
+    std::cout << "Reached goal and aligned!" << std::endl;
     cv::waitKey(0);
     return 0;
 }
