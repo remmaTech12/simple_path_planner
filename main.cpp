@@ -26,8 +26,8 @@ double normalizeAngle(double angle) {
 }
 
 Velocity computeVelocity(const Pose2D& current, const Pose2D& target) {
-    const double K_linear = 1.0;
-    const double K_angular = 1.0;
+    const double K_linear = 2.0;
+    const double K_angular = 2.0;
 
     double dx = target.x - current.x;
     double dy = target.y - current.y;
@@ -123,15 +123,20 @@ std::vector<Pose2D> generateReedsSheppPath(Pose2D start, Pose2D goal, double ste
 }
 
 int main() {
-    Pose2D start = {-1.0, -1.0, 0.0}; // -M_PI / 2.0
-    Pose2D goal  = {1.0, 1.0, 0.0};
+    Pose2D start = {-1.0, -1.0, 0.0};
+    Pose2D goal  = {1.0, 1.0, M_PI / 2.0};
 
-    std::vector<Pose2D> path = generateReedsSheppPath(start, goal);
+    int mode = 1; // 0: Reeds-Shepp tracking, 1: rotate-translate-rotate
+
+    std::vector<Pose2D> path;
+    if (mode == 0) {
+        path = generateReedsSheppPath(start, goal, 0.3);
+    }
 
     Pose2D robot = start;
     double dt = 0.1;
-    const double position_threshold = 0.05;
-    const double angle_threshold = 0.05;
+    double position_threshold = 0.05;
+    double angle_threshold = 0.05;
 
     const int scale = 200;
     const int width = 600, height = 600;
@@ -140,42 +145,97 @@ int main() {
 
     std::vector<cv::Point> trajectory;
     size_t target_index = 0;
+    int rtr_state = 0; // 0: rotate to goal, 1: move forward, 2: rotate to goal theta
+    int frame_count = 0;
 
     while (true) {
-        if (target_index >= path.size()) {
-            double angle_error = normalizeAngle(goal.theta - robot.theta);
-            if (std::abs(angle_error) < angle_threshold) break;
+        canvas = cv::Scalar(255, 255, 255);
 
-            Velocity cmd;
-            cmd.linear = 0.0;
-            cmd.angular = std::min(std::max(2.0 * angle_error, -1.0), 1.0);
-            updatePose(robot, cmd, dt);
-        } else {
-            Pose2D target = path[target_index];
-            double dx = target.x - robot.x;
-            double dy = target.y - robot.y;
-            double dist = std::hypot(dx, dy);
+        if (mode == 0) {
+            // Reeds-Shepp tracking
+            if (target_index >= path.size()) {
+                double angle_error = normalizeAngle(goal.theta - robot.theta);
+                if (std::abs(angle_error) < angle_threshold) break;
 
-            if (dist < position_threshold) {
-                target_index++;
-            } else {
-                Velocity cmd = computeVelocity(robot, target);
+                Velocity cmd;
+                cmd.linear = 0.0;
+                cmd.angular = std::min(std::max(2.0 * angle_error, -1.0), 1.0);
                 updatePose(robot, cmd, dt);
+            } else {
+                Pose2D target = path[target_index];
+                double dx = target.x - robot.x;
+                double dy = target.y - robot.y;
+                double dist = std::hypot(dx, dy);
+
+                if (dist < position_threshold) {
+                    target_index++;
+                } else {
+                    Velocity cmd = computeVelocity(robot, target);
+                    updatePose(robot, cmd, dt);
+                }
+            }
+
+            // Draw planned path in blue
+            for (size_t i = 1; i < path.size(); ++i) {
+                cv::line(canvas,
+                         toPixel(path[i - 1], scale, offsetX, offsetY),
+                         toPixel(path[i], scale, offsetX, offsetY),
+                         cv::Scalar(255, 0, 0), 2);
+            }
+
+        } else if (mode == 1) {
+            double vx = 0.3;
+            double wz = 0.25;
+            // Rotate-Translate-Rotate mode
+            if (rtr_state == 0) {
+                // Step 1: rotate to face goal
+                double dx = goal.x - robot.x;
+                double dy = goal.y - robot.y;
+                double target_theta = std::atan2(dy, dx);
+                double angle_error = normalizeAngle(target_theta - robot.theta);
+
+                if (std::abs(angle_error) < angle_threshold) {
+                    rtr_state = 1;
+                } else {
+                    Velocity cmd;
+                    cmd.linear = 0.0;
+                    cmd.angular = std::min(std::max(2.0 * angle_error, -wz), wz);
+                    updatePose(robot, cmd, dt);
+                }
+
+            } else if (rtr_state == 1) {
+                // Step 2: translate forward
+                double dx = goal.x - robot.x;
+                double dy = goal.y - robot.y;
+                double dist = std::hypot(dx, dy);
+                position_threshold = 0.2;
+
+                if (dist < position_threshold) {
+                    rtr_state = 2;
+                } else {
+                    Velocity cmd;
+                    cmd.linear = vx;
+                    cmd.angular = 0.0;
+                    updatePose(robot, cmd, dt);
+                }
+
+            } else if (rtr_state == 2) {
+                // Step 3: rotate to match goal theta
+                double angle_error = normalizeAngle(goal.theta - robot.theta);
+
+                if (std::abs(angle_error) < angle_threshold) {
+                    break;
+                } else {
+                    Velocity cmd;
+                    cmd.linear = 0.0;
+                    cmd.angular = std::min(std::max(2.0 * angle_error, -wz), wz);
+                    updatePose(robot, cmd, dt);
+                }
             }
         }
 
         trajectory.push_back(toPixel(robot, scale, offsetX, offsetY));
-        canvas = cv::Scalar(255, 255, 255);
 
-        // target trajectory
-        for (size_t i = 1; i < path.size(); ++i) {
-            cv::line(canvas,
-                     toPixel(path[i - 1], scale, offsetX, offsetY),
-                     toPixel(path[i], scale, offsetX, offsetY),
-                     cv::Scalar(255, 0, 0), 2); // Blue
-        }
-
-        // actual robot trajectory
         for (size_t i = 1; i < trajectory.size(); ++i) {
             cv::line(canvas, trajectory[i - 1], trajectory[i], cv::Scalar(0, 0, 255), 2);
         }
@@ -183,9 +243,12 @@ int main() {
         drawRobotPolygon(canvas, robot, scale, offsetX, offsetY);
         cv::imshow("Reeds-Shepp Path Tracking", canvas);
         if (cv::waitKey(30) == 27) break;
+
+        frame_count++;
     }
 
     std::cout << "Reached goal and aligned!" << std::endl;
+    std::cout << "Simulation motion time: " << frame_count * dt << " seconds" << std::endl;
     cv::waitKey(0);
     return 0;
 }
