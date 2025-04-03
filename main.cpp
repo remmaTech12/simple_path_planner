@@ -26,8 +26,8 @@ double normalizeAngle(double angle) {
 }
 
 Velocity computeVelocity(const Pose2D& current, const Pose2D& target) {
-    const double K_linear = 0.8;
-    const double K_angular = 2.0;
+    const double K_linear = 1.0;
+    const double K_angular = 1.0;
 
     double dx = target.x - current.x;
     double dy = target.y - current.y;
@@ -39,8 +39,8 @@ Velocity computeVelocity(const Pose2D& current, const Pose2D& target) {
     cmd.linear = K_linear * distance;
     cmd.angular = K_angular * angle_diff;
 
-    cmd.linear = std::min(cmd.linear, 0.5);
-    cmd.angular = std::min(std::max(cmd.angular, -1.0), 1.0);
+    cmd.linear = std::min(cmd.linear, 1.0);
+    cmd.angular = std::min(std::max(cmd.angular, -M_PI/2.0), M_PI/2.0);
 
     return cmd;
 }
@@ -90,7 +90,7 @@ void drawRobotPolygon(cv::Mat& canvas, const Pose2D& pose, int scale, int offset
 }
 
 std::vector<Pose2D> generateReedsSheppPath(Pose2D start, Pose2D goal, double step_size = 0.1) {
-    auto space = std::make_shared<ob::ReedsSheppStateSpace>(1.0);
+    auto space = std::make_shared<ob::ReedsSheppStateSpace>(0.5);
 
     ob::RealVectorBounds bounds(2);
     bounds.setLow(-10);
@@ -123,7 +123,7 @@ std::vector<Pose2D> generateReedsSheppPath(Pose2D start, Pose2D goal, double ste
 }
 
 int main() {
-    Pose2D start = {-1.0, -1.0, M_PI / 2.0};
+    Pose2D start = {-1.0, -1.0, 0.0}; // -M_PI / 2.0
     Pose2D goal  = {1.0, 1.0, 0.0};
 
     std::vector<Pose2D> path = generateReedsSheppPath(start, goal);
@@ -167,6 +167,15 @@ int main() {
         trajectory.push_back(toPixel(robot, scale, offsetX, offsetY));
         canvas = cv::Scalar(255, 255, 255);
 
+        // target trajectory
+        for (size_t i = 1; i < path.size(); ++i) {
+            cv::line(canvas,
+                     toPixel(path[i - 1], scale, offsetX, offsetY),
+                     toPixel(path[i], scale, offsetX, offsetY),
+                     cv::Scalar(255, 0, 0), 2); // Blue
+        }
+
+        // actual robot trajectory
         for (size_t i = 1; i < trajectory.size(); ++i) {
             cv::line(canvas, trajectory[i - 1], trajectory[i], cv::Scalar(0, 0, 255), 2);
         }

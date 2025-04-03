@@ -2,14 +2,12 @@
 Need to install opencv.
 ```
 sudo apt install libopencv-dev
+sudo apt install libompl-dev
+sudo apt install libeigen3-dev
 ```
 
 ## Command
-Compile
+Execute the following command.
 ```
-g++ main.cpp -o main `pkg-config --cflags --libs opencv4`
-```
-Execute
-```
-./main
+./execute.sh
 ```
