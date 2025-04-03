@@ -1,5 +1,5 @@
 ## Preparation
-Need to install opencv.
+Need to install the following packages.
 ```
 sudo apt install libopencv-dev
 sudo apt install libompl-dev
