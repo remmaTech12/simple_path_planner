@@ -25,7 +25,7 @@ double normalizeAngle(double angle) {
     return angle;
 }
 
-Velocity computeVelocity(const Pose2D& current, const Pose2D& target) {
+Velocity computeVelocityProportionalControl(const Pose2D& current, const Pose2D& target) {
     const double K_linear = 2.0;
     const double K_angular = 2.0;
 
@@ -42,6 +42,39 @@ Velocity computeVelocity(const Pose2D& current, const Pose2D& target) {
     cmd.linear = std::min(cmd.linear, 1.0);
     cmd.angular = std::min(std::max(cmd.angular, -M_PI/2.0), M_PI/2.0);
 
+    return cmd;
+}
+
+Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pose2D>& path, size_t target_index) {
+    const double lookahead_distance = 0.2;
+    const double linear_velocity = 0.3;
+    const double max_linear = 1.0;
+    const double max_angular = M_PI / 2.0;
+    
+    Pose2D target = path.back();
+    for (size_t i = target_index; i < path.size(); ++i) {
+        double dx = path[i].x - current.x;
+        double dy = path[i].y - current.y;
+        if (std::hypot(dx, dy) >= lookahead_distance) {
+            target = path[i];
+            break;
+        }
+    }
+
+    double dx = target.x - current.x;
+    double dy = target.y - current.y;
+    double x_r = std::cos(-current.theta) * dx - std::sin(-current.theta) * dy;
+    double y_r = std::sin(-current.theta) * dx + std::cos(-current.theta) * dy;
+    double alpha = std::atan2(y_r, x_r);
+    double kappa = 2.0 * std::sin(alpha) / lookahead_distance;
+
+    double dist_to_target = std::hypot(target.x - current.x, target.y - current.y);
+    double linear = linear_velocity * (dist_to_target / lookahead_distance);
+    linear = std::clamp(linear, 0.0, max_linear);
+
+    Velocity cmd;
+    cmd.linear = linear;
+    cmd.angular = std::clamp(linear * kappa, -max_angular, max_angular);
     return cmd;
 }
 
@@ -127,6 +160,7 @@ int main() {
     Pose2D goal  = {1.0, 1.0, M_PI / 2.0};
 
     int mode = 0; // 0: Reeds-Shepp tracking, 1: rotate-translate-rotate
+    int path_tracking_mode = 1; // 0: P control, 1: Pure pursuit
 
     std::vector<Pose2D> path;
     if (mode == 0) {
@@ -202,7 +236,9 @@ int main() {
                 if (dist < position_threshold) {
                     target_index++;
                 } else {
-                    Velocity cmd = computeVelocity(robot, target);
+                    Velocity cmd = path_tracking_mode == 0 ? computeVelocityProportionalControl(robot, target)
+                                 : path_tracking_mode == 1 ? computeVelocityPurePursuit(robot, path, target_index)
+                                 : Velocity{0.0, 0.0};
                     updatePose(robot, cmd, dt);
                 }
             }
