@@ -9,6 +9,102 @@
 #include <algorithm>
 namespace ob = ompl::base;
 
+Velocity computeVelocityProportionalControl(const Pose2D& current, const Pose2D& target);
+Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pose2D>& path, size_t target_index);
+
+bool computeCommandForReedsShepp(size_t &target_index, double position_threshold, double angle_threshold,
+                                 const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
+                                 Pose2D &robot, double dt, int path_tracking_mode, Velocity &cmd)
+{
+    bool is_finished = false;
+    if (target_index >= path.size())
+    {
+        double angle_error = normalizeAngle(waypoints.back().theta - robot.theta);
+        if (std::abs(angle_error) < angle_threshold) {
+            is_finished = true;
+            return is_finished;
+        }
+
+        cmd.linear = 0.0;
+        cmd.angular = std::min(std::max(2.0 * angle_error, -1.0), 1.0);
+    }
+    else
+    {
+        Pose2D target = path[target_index];
+        double dx = target.x - robot.x;
+        double dy = target.y - robot.y;
+        double dist = std::hypot(dx, dy);
+
+        if (dist < position_threshold)
+        {
+            target_index++;
+        }
+        else
+        {
+            cmd =   path_tracking_mode == 0 ? computeVelocityProportionalControl(robot, target)
+                  : path_tracking_mode == 1 ? computeVelocityPurePursuit(robot, path, target_index)
+                                            : Velocity{0.0, 0.0};
+        }
+    }
+    return is_finished;
+}
+
+bool computeCommandForRTR(int &rtr_state, size_t &target_index, double position_threshold, double angle_threshold,
+                         const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
+                         Pose2D &robot, double dt, int path_tracking_mode, Velocity &cmd)
+{
+    bool is_finished = false;
+    double vx = 0.3;
+    double wz = 0.25;
+
+    if (rtr_state == 0)
+    {
+        // Step 1: rotate to face goal
+        double dx = waypoints.back().x - robot.x;
+        double dy = waypoints.back().y - robot.y;
+        double target_theta = std::atan2(dy, dx);
+        double angle_error = normalizeAngle(target_theta - robot.theta);
+
+        if (std::abs(angle_error) < angle_threshold)
+        {
+            rtr_state = 1;
+        }
+        else
+        {
+            cmd.linear = 0.0;
+            cmd.angular = std::clamp(2.0 * angle_error, -wz, wz);
+        }
+    }
+    else if (rtr_state == 1)
+    {
+        // Step 2: translate toward goal
+        double dx = waypoints.back().x - robot.x;
+        double dy = waypoints.back().y - robot.y;
+        double dist = std::hypot(dx, dy);
+        position_threshold = 0.2;
+
+        if (dist < position_threshold)
+        {
+            rtr_state = 2;
+        }
+        else
+        {
+            cmd.linear = vx;
+            cmd.angular = 0.0;
+        }
+    }
+    else if (rtr_state == 2)
+    {
+        // Step 3: rotate to match goal orientation
+        double angle_error = normalizeAngle(waypoints.back().theta - robot.theta);
+        if (std::abs(angle_error) < angle_threshold) is_finished = true;
+
+        cmd.linear = 0.0;
+        cmd.angular = std::clamp(2.0 * angle_error, -wz, wz);
+    }
+    return is_finished;
+}
+
 std::vector<Pose2D> generateReedsSheppPath(Pose2D start, Pose2D goal, double step_size = 0.1) {
     auto space = std::make_shared<ob::ReedsSheppStateSpace>(0.5);
 

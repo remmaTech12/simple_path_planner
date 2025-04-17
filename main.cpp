@@ -1,7 +1,6 @@
 #include "include/util.hpp"
-#include "include/controller.hpp"
 #include "include/draw.hpp"
-#include "include/path_planner.hpp"
+#include "include/motion.hpp"
 
 int main() {
     // start and goal information
@@ -11,7 +10,7 @@ int main() {
         {1.0, 1.0, M_PI / 2}};
 
     // parameters
-    int mode = 0; // 0: Reeds-Shepp tracking, 1: rotate-translate-rotate
+    int mode = 1; // 0: Reeds-Shepp tracking, 1: rotate-translate-rotate
     int path_tracking_mode = 1; // 0: P control, 1: Pure pursuit
     double dt = 0.1;
     double position_threshold = 0.05;
@@ -27,7 +26,7 @@ int main() {
                 segment.erase(segment.begin());
             path.insert(path.end(), segment.begin(), segment.end());
         }
-        // path = waypoints; // For testing, use waypoints directly
+        // path = waypoints; // use waypoints directly
 
         // output path info to console
         /*
@@ -75,81 +74,16 @@ int main() {
         }
 
         // --- Robot motion logic ---
+        Velocity cmd;
+        bool is_finished = false;
         if (mode == 0) {
-            // Reeds-Shepp tracking
-            if (target_index >= path.size()) {
-                double angle_error = normalizeAngle(waypoints.back().theta - robot.theta);
-                if (std::abs(angle_error) < angle_threshold) break;
-
-                Velocity cmd;
-                cmd.linear = 0.0;
-                cmd.angular = std::min(std::max(2.0 * angle_error, -1.0), 1.0);
-                updatePose(robot, cmd, dt);
-                mode = 1;
-            } else {
-                Pose2D target = path[target_index];
-                double dx = target.x - robot.x;
-                double dy = target.y - robot.y;
-                double dist = std::hypot(dx, dy);
-
-                if (dist < position_threshold) {
-                    target_index++;
-                } else {
-                    Velocity cmd = path_tracking_mode == 0 ? computeVelocityProportionalControl(robot, target)
-                                 : path_tracking_mode == 1 ? computeVelocityPurePursuit(robot, path, target_index)
-                                 : Velocity{0.0, 0.0};
-                    updatePose(robot, cmd, dt);
-                }
-            }
-
+            is_finished = computeCommandForReedsShepp(target_index, position_threshold, angle_threshold,
+                                                      waypoints, path, robot, dt, path_tracking_mode, cmd);
         } else if (mode == 1) {
-            // Rotate-Translate-Rotate motion
-            double vx = 0.3;
-            double wz = 0.25;
-
-            if (rtr_state == 0) {
-                // Step 1: rotate to face goal
-                double dx = waypoints.back().x - robot.x;
-                double dy = waypoints.back().y - robot.y;
-                double target_theta = std::atan2(dy, dx);
-                double angle_error = normalizeAngle(target_theta - robot.theta);
-
-                if (std::abs(angle_error) < angle_threshold) {
-                    rtr_state = 1;
-                } else {
-                    Velocity cmd;
-                    cmd.linear = 0.0;
-                    cmd.angular = std::min(std::max(2.0 * angle_error, -wz), wz);
-                    updatePose(robot, cmd, dt);
-                }
-
-            } else if (rtr_state == 1) {
-                // Step 2: translate toward goal
-                double dx = waypoints.back().x - robot.x;
-                double dy = waypoints.back().y - robot.y;
-                double dist = std::hypot(dx, dy);
-                position_threshold = 0.02;
-
-                if (dist < position_threshold) {
-                    rtr_state = 2;
-                } else {
-                    Velocity cmd;
-                    cmd.linear = vx;
-                    cmd.angular = 0.0;
-                    updatePose(robot, cmd, dt);
-                }
-
-            } else if (rtr_state == 2) {
-                // Step 3: rotate to match goal orientation
-                double angle_error = normalizeAngle(waypoints.back().theta - robot.theta);
-                if (std::abs(angle_error) < angle_threshold) break;
-
-                Velocity cmd;
-                cmd.linear = 0.0;
-                cmd.angular = std::min(std::max(2.0 * angle_error, -wz), wz);
-                updatePose(robot, cmd, dt);
-            }
+            is_finished = computeCommandForRTR(rtr_state, target_index, position_threshold, angle_threshold,
+                                               waypoints, path, robot, dt, path_tracking_mode, cmd);
         }
+        updatePose(robot, cmd, dt);
 
         // --- Drawing ---
         trajectory.push_back(toPixel(robot, scale, offsetX, offsetY));
