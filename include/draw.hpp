@@ -66,7 +66,9 @@ public:
     }
 
     void imshow() const {
-        cv::imshow("Robot Simulation", canvas_);
+        cv::Mat flipped;
+        cv::flip(canvas_, flipped, 0);
+        cv::imshow("Robot Simulation", flipped);
     }
 
     void setupVideoWriter(const std::string& filename, int fps) {
