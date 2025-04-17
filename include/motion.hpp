@@ -11,6 +11,7 @@ namespace ob = ompl::base;
 
 Velocity computeVelocityProportionalControl(const Pose2D& current, const Pose2D& target);
 Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pose2D>& path, size_t target_index);
+std::vector<Pose2D> generateReedsSheppPath(Pose2D start, Pose2D goal, double step_size);
 
 bool computeCommandForReedsShepp(size_t &target_index, double position_threshold, double angle_threshold,
                                  const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
@@ -104,6 +105,29 @@ bool computeCommandForRTR(int &rtr_state, size_t &target_index, double position_
         cmd.angular = std::clamp(2.0 * angle_error, -wz, wz);
     }
     return is_finished;
+}
+
+std::vector<Pose2D> generateReedsSheppPathFromWaypoints(const std::vector<Pose2D> &waypoints) {
+    std::vector<Pose2D> path;
+    for (size_t i = 0; i < waypoints.size() - 1; ++i)
+    {
+        auto segment = generateReedsSheppPath(waypoints[i], waypoints[i + 1], 0.3);
+        // Remove the last point of each segment except the final one to avoid duplicates
+        if (!path.empty())
+            segment.erase(segment.begin());
+        path.insert(path.end(), segment.begin(), segment.end());
+    }
+    // path = waypoints; // use waypoints directly
+
+    // output path info to console
+    /*
+    std::cout << "Generated path:" << std::endl;
+    for (const auto &p : path)
+    {
+        std::cout << "x: " << p.x << ", y: " << p.y << ", theta: " << p.theta << std::endl;
+    }
+    */
+    return path;
 }
 
 std::vector<Pose2D> generateReedsSheppPath(Pose2D start, Pose2D goal, double step_size = 0.1) {

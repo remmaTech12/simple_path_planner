@@ -3,18 +3,18 @@
 #include "include/motion.hpp"
 
 int main() {
-    // start and goal information
-    std::vector<Pose2D> waypoints = {
-        {-1.0, -1.0, 0.0},
-        {-0.5, 0.5, M_PI / 4},
-        {1.0, 1.0, M_PI / 2}};
-
     // Draw setup
     const int scale = 200;
     const int width = 600, height = 600;
     Draw draw(width, height, scale);
     const std::string video_filename = "output.mp4";
     draw.setupVideoWriter(video_filename, 30);
+
+    // start and goal information
+    std::vector<Pose2D> waypoints = {
+        {-1.0, -1.0, 0.0},
+        {-0.5, 0.5, M_PI / 4},
+        {1.0, 1.0, M_PI / 2}};
 
     // parameters
     int mode = 0; // 0: Reeds-Shepp tracking, 1: rotate-translate-rotate
@@ -29,30 +29,13 @@ int main() {
     int rtr_state = 0;  // 0: rotate to face goal, 1: move forward, 2: rotate to goal orientation
     int frame_count = 0;
 
+    // waypoints creation
     std::vector<Pose2D> path;
     if (mode == 0) {
-        for (size_t i = 0; i < waypoints.size() - 1; ++i)
-        {
-            auto segment = generateReedsSheppPath(waypoints[i], waypoints[i + 1], 0.3);
-            // Remove the last point of each segment except the final one to avoid duplicates
-            if (!path.empty())
-                segment.erase(segment.begin());
-            path.insert(path.end(), segment.begin(), segment.end());
-        }
-        // path = waypoints; // use waypoints directly
-
-        // output path info to console
-        /*
-        std::cout << "Generated path:" << std::endl;
-        for (const auto &p : path)
-        {
-            std::cout << "x: " << p.x << ", y: " << p.y << ", theta: " << p.theta << std::endl;
-        }
-        */
+        path = generateReedsSheppPathFromWaypoints(waypoints);
     }
 
     while (true) {
-        // --- Robot motion logic ---
         Velocity cmd;
         bool is_finished = false;
         if (mode == 0) {
@@ -65,10 +48,9 @@ int main() {
         updatePose(robot, cmd, dt);
         
         draw.draw(mode, robot, path);
+        frame_count++;
 
         if (cv::waitKey(30) == 27 || is_finished) break;
-
-        frame_count++;
     }
 
     // --- Finalize ---
