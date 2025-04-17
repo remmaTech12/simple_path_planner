@@ -185,7 +185,7 @@ Velocity computeVelocityProportionalControl(const Pose2D& current, const Pose2D&
 
 Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pose2D>& path, size_t target_index) {
     Velocity cmd = {0.0, 0.0};
-    const double lookahead_distance = 0.2;
+    const double lookahead_distance = 0.01;
     const double linear_velocity = 0.3;
     const double max_linear = 1.0;
     const double max_angular = M_PI / 2.0;
@@ -211,22 +211,13 @@ Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pos
     double linear = linear_velocity * (dist_to_target / lookahead_distance);
     linear = std::clamp(linear, 0.0, max_linear);
 
-    // Reverse motion handling
-    /*
-    if (x_r < 0) {
-        linear *= -1.0;  // Reverse direction if target is behind
-    }
-    */
-
     cmd.linear = linear;
     cmd.angular = std::clamp(linear * kappa, -max_angular, max_angular);
 
     // Rotate in place when angular deviation is large
-    /*
     if (std::abs(std::cos(alpha)) < std::cos(M_PI / 10.0)) {
         cmd.linear = 0.0;
         cmd.angular = std::clamp(2.0 * alpha, -max_angular, max_angular);
     }
-    */
     return cmd;
 }
