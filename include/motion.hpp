@@ -38,6 +38,7 @@ bool computeCommandForReedsShepp(size_t &target_index, double position_threshold
         if (dist < position_threshold)
         {
             target_index++;
+            cmd = {0.0, 0.0};
         }
         else
         {
@@ -159,6 +160,7 @@ Velocity computeVelocityProportionalControl(const Pose2D& current, const Pose2D&
 }
 
 Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pose2D>& path, size_t target_index) {
+    Velocity cmd = {0.0, 0.0};
     const double lookahead_distance = 0.2;
     const double linear_velocity = 0.3;
     const double max_linear = 1.0;
@@ -192,7 +194,6 @@ Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pos
     }
     */
 
-    Velocity cmd;
     cmd.linear = linear;
     cmd.angular = std::clamp(linear * kappa, -max_angular, max_angular);
 
