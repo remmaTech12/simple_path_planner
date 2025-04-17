@@ -28,7 +28,7 @@ Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pos
     const double linear_velocity = 0.3;
     const double max_linear = 1.0;
     const double max_angular = M_PI / 2.0;
-    
+
     Pose2D target = path.back();
     for (size_t i = target_index; i < path.size(); ++i) {
         double dx = path[i].x - current.x;
@@ -50,8 +50,23 @@ Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pos
     double linear = linear_velocity * (dist_to_target / lookahead_distance);
     linear = std::clamp(linear, 0.0, max_linear);
 
+    // Reverse motion handling
+    /*
+    if (x_r < 0) {
+        linear *= -1.0;  // Reverse direction if target is behind
+    }
+    */
+
     Velocity cmd;
     cmd.linear = linear;
     cmd.angular = std::clamp(linear * kappa, -max_angular, max_angular);
+
+    // Rotate in place when angular deviation is large
+    /*
+    if (std::abs(std::cos(alpha)) < std::cos(M_PI / 10.0)) {
+        cmd.linear = 0.0;
+        cmd.angular = std::clamp(2.0 * alpha, -max_angular, max_angular);
+    }
+    */
     return cmd;
 }

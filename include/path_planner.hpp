@@ -1,3 +1,4 @@
+#pragma once
 #include "util.hpp"
 #include <ompl/base/spaces/ReedsSheppStateSpace.h>
 #include <ompl/base/ScopedState.h>
