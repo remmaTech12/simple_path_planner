@@ -12,6 +12,46 @@ public:
         offsetY_ = height_ / 2;
     }
 
+    void setupVideoWriter(const std::string& filename, int fps) {
+        video_.open(filename, cv::VideoWriter::fourcc('m', 'p', '4', 'v'), fps, cv::Size(width_, height_));
+        if (!video_.isOpened()) {
+            throw std::runtime_error("Could not open the output video file.");
+        }
+    }
+
+    void releaseVideo() {
+        video_.release();
+    }
+
+    void draw(int mode, const Pose2D& robot, const std::vector<Pose2D>& path) {
+        clearCanvas();
+
+        // Draw planned path (for mode 0)
+        if (mode == 0) {
+            drawPlannedPath(path);
+        }
+        trajectory_.push_back(toPixel(robot));
+        drawTrajectory();
+        drawRobotPolygon(robot);
+
+        // Show window and write to video
+        imshow();
+        writeVideoFrame();
+    }
+
+
+private:
+    int scale_;
+    int width_;
+    int height_;
+    int offsetX_;
+    int offsetY_;
+
+    std::vector<cv::Point> trajectory_;
+
+    cv::Mat canvas_;
+    cv::VideoWriter video_;
+
     cv::Point2i toPixel(const Pose2D& pose) const {
         return cv::Point2i(
             static_cast<int>(pose.x * scale_) + offsetX_,
@@ -57,7 +97,7 @@ public:
 
     void drawPlannedPath(const std::vector<Pose2D>& path) const {
         for (size_t i = 1; i < path.size(); ++i) {
-            cv::line(canvas_, toPixel(path[i - 1]), toPixel(path[i]), cv::Scalar(0, 255, 0), 2);  // Green
+            cv::line(canvas_, toPixel(path[i - 1]), toPixel(path[i]), cv::Scalar(255, 0, 0), 2);  // Blue
         }
     }
     
@@ -71,47 +111,7 @@ public:
         cv::imshow("Robot Simulation", flipped);
     }
 
-    void setupVideoWriter(const std::string& filename, int fps) {
-        video_.open(filename, cv::VideoWriter::fourcc('m', 'p', '4', 'v'), fps, cv::Size(width_, height_));
-        if (!video_.isOpened()) {
-            throw std::runtime_error("Could not open the output video file.");
-        }
-    }
-
     void writeVideoFrame() {
         video_.write(canvas_);
     }
-
-    void releaseVideo() {
-        video_.release();
-    }
-
-    void draw(int mode, const Pose2D& robot, const std::vector<Pose2D>& path) {
-        clearCanvas();
-
-        // Draw planned path (for mode 0)
-        if (mode == 0) {
-            drawPlannedPath(path);
-        }
-        trajectory_.push_back(toPixel(robot));
-        drawTrajectory();
-        drawRobotPolygon(robot);
-
-        // Show window and write to video
-        imshow();
-        writeVideoFrame();
-    }
-
-
-private:
-    int scale_;
-    int width_;
-    int height_;
-    int offsetX_;
-    int offsetY_;
-
-    std::vector<cv::Point> trajectory_;
-
-    cv::Mat canvas_;
-    cv::VideoWriter video_;
 };
