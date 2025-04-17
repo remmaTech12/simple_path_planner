@@ -4,18 +4,40 @@
 #include "include/path_planner.hpp"
 
 int main() {
+    // start and goal information
     Pose2D start = {-1.0, -1.0, 0.0};
     Pose2D goal  = {1.0, 1.0, M_PI / 2.0};
 
+    std::vector<Pose2D> waypoints = {
+        {-1.0, -1.0, M_PI},
+        {-0.5, 0.5, M_PI / 4},
+        {1.0, 1.0, M_PI / 2}};
+
+    // controller algorithm
     int mode = 0; // 0: Reeds-Shepp tracking, 1: rotate-translate-rotate
     int path_tracking_mode = 1; // 0: P control, 1: Pure pursuit
 
     std::vector<Pose2D> path;
     if (mode == 0) {
-        path = generateReedsSheppPath(start, goal, 0.3);
+        // path = generateReedsSheppPath(start, goal, 0.3);
+        for (size_t i = 0; i < waypoints.size() - 1; ++i)
+        {
+            auto segment = generateReedsSheppPath(waypoints[i], waypoints[i + 1], 0.3);
+            // Remove the last point of each segment except the final one to avoid duplicates
+            if (!path.empty())
+                segment.erase(segment.begin());
+            path.insert(path.end(), segment.begin(), segment.end());
+        }
+
+        // output path info to console
+        std::cout << "Generated path:" << std::endl;
+        for (const auto &p : path)
+        {
+            std::cout << "x: " << p.x << ", y: " << p.y << ", theta: " << p.theta << std::endl;
+        }
     }
 
-    Pose2D robot = start;
+    Pose2D robot = waypoints[0];
     double dt = 0.1;
     double position_threshold = 0.05;
     double angle_threshold = 0.05;
@@ -40,21 +62,11 @@ int main() {
     int rtr_state = 0;  // 0: rotate to face goal, 1: move forward, 2: rotate to goal orientation
     int frame_count = 0;
 
-    // Draw planned path once (for mode 0)
-    if (mode == 0) {
-        for (size_t i = 1; i < path.size(); ++i) {
-            cv::line(canvas,
-                     toPixel(path[i - 1], scale, offsetX, offsetY),
-                     toPixel(path[i], scale, offsetX, offsetY),
-                     cv::Scalar(255, 0, 0), 2);  // Blue
-        }
-    }
-
     while (true) {
         // Clear canvas
         canvas = cv::Scalar(255, 255, 255);
 
-        // Redraw planned path (for mode 0)
+        // Draw planned path (for mode 0)
         if (mode == 0) {
             for (size_t i = 1; i < path.size(); ++i) {
                 cv::line(canvas,
