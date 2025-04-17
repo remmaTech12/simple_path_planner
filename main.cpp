@@ -5,21 +5,20 @@
 
 int main() {
     // start and goal information
-    Pose2D start = {-1.0, -1.0, 0.0};
-    Pose2D goal  = {1.0, 1.0, M_PI / 2.0};
-
     std::vector<Pose2D> waypoints = {
         {-1.0, -1.0, M_PI},
         {-0.5, 0.5, M_PI / 4},
         {1.0, 1.0, M_PI / 2}};
 
-    // controller algorithm
+    // parameters
     int mode = 0; // 0: Reeds-Shepp tracking, 1: rotate-translate-rotate
     int path_tracking_mode = 1; // 0: P control, 1: Pure pursuit
+    double dt = 0.1;
+    double position_threshold = 0.05;
+    double angle_threshold = 0.05;
 
     std::vector<Pose2D> path;
     if (mode == 0) {
-        // path = generateReedsSheppPath(start, goal, 0.3);
         for (size_t i = 0; i < waypoints.size() - 1; ++i)
         {
             auto segment = generateReedsSheppPath(waypoints[i], waypoints[i + 1], 0.3);
@@ -28,19 +27,17 @@ int main() {
                 segment.erase(segment.begin());
             path.insert(path.end(), segment.begin(), segment.end());
         }
+        // path = waypoints; // For testing, use waypoints directly
 
         // output path info to console
+        /*
         std::cout << "Generated path:" << std::endl;
         for (const auto &p : path)
         {
             std::cout << "x: " << p.x << ", y: " << p.y << ", theta: " << p.theta << std::endl;
         }
+        */
     }
-
-    Pose2D robot = waypoints[0];
-    double dt = 0.1;
-    double position_threshold = 0.05;
-    double angle_threshold = 0.05;
 
     const int scale = 200;
     const int width = 600, height = 600;
@@ -57,6 +54,7 @@ int main() {
         return -1;
     }
 
+    Pose2D robot = waypoints[0];
     std::vector<cv::Point> trajectory;
     size_t target_index = 0;
     int rtr_state = 0;  // 0: rotate to face goal, 1: move forward, 2: rotate to goal orientation
@@ -80,13 +78,14 @@ int main() {
         if (mode == 0) {
             // Reeds-Shepp tracking
             if (target_index >= path.size()) {
-                double angle_error = normalizeAngle(goal.theta - robot.theta);
+                double angle_error = normalizeAngle(waypoints.back().theta - robot.theta);
                 if (std::abs(angle_error) < angle_threshold) break;
 
                 Velocity cmd;
                 cmd.linear = 0.0;
                 cmd.angular = std::min(std::max(2.0 * angle_error, -1.0), 1.0);
                 updatePose(robot, cmd, dt);
+                mode = 1;
             } else {
                 Pose2D target = path[target_index];
                 double dx = target.x - robot.x;
@@ -110,8 +109,8 @@ int main() {
 
             if (rtr_state == 0) {
                 // Step 1: rotate to face goal
-                double dx = goal.x - robot.x;
-                double dy = goal.y - robot.y;
+                double dx = waypoints.back().x - robot.x;
+                double dy = waypoints.back().y - robot.y;
                 double target_theta = std::atan2(dy, dx);
                 double angle_error = normalizeAngle(target_theta - robot.theta);
 
@@ -126,10 +125,10 @@ int main() {
 
             } else if (rtr_state == 1) {
                 // Step 2: translate toward goal
-                double dx = goal.x - robot.x;
-                double dy = goal.y - robot.y;
+                double dx = waypoints.back().x - robot.x;
+                double dy = waypoints.back().y - robot.y;
                 double dist = std::hypot(dx, dy);
-                position_threshold = 0.2;
+                position_threshold = 0.02;
 
                 if (dist < position_threshold) {
                     rtr_state = 2;
@@ -142,7 +141,7 @@ int main() {
 
             } else if (rtr_state == 2) {
                 // Step 3: rotate to match goal orientation
-                double angle_error = normalizeAngle(goal.theta - robot.theta);
+                double angle_error = normalizeAngle(waypoints.back().theta - robot.theta);
                 if (std::abs(angle_error) < angle_threshold) break;
 
                 Velocity cmd;
