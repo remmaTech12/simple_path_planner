@@ -106,9 +106,8 @@ private:
     }
 
     void imshow() const {
-        cv::Mat flipped;
-        cv::flip(canvas_, flipped, 0);
-        cv::imshow("Robot Simulation", flipped);
+        cv::flip(canvas_, canvas_, 0);
+        cv::imshow("Robot Simulation", canvas_);
     }
 
     void writeVideoFrame() {
