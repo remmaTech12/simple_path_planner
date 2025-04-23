@@ -12,12 +12,15 @@ int main() {
 
     // start and goal information
     std::vector<Pose2D> waypoints = {
+        {1.0, -1.0, 0.0},
         {-1.0, -1.0, 0.0},
+        {-0.75, 0.25, M_PI / 4},
         {-0.5, 0.5, M_PI / 4},
+        {0.25, 0.25, M_PI / 4},
         {1.0, 1.0, M_PI / 2}};
 
     // parameters
-    int mode = 0; // 0: Reeds-Shepp tracking, 1: rotate-translate-rotate
+    int mode = 2; // 0: Reeds-Shepp tracking, 1: rotate-translate-rotate, 2: guideless AGV
     int path_tracking_mode = 1; // 0: P control, 1: Pure pursuit
     double dt = 0.1;
     double position_threshold = 0.05;
@@ -34,6 +37,7 @@ int main() {
     if (mode == 0) {
         path = generateReedsSheppPathFromWaypoints(waypoints);
     }
+    path = waypoints;
 
     while (true) {
         Velocity cmd;
@@ -44,6 +48,9 @@ int main() {
         } else if (mode == 1) {
             is_finished = computeCommandForRTR(rtr_state, target_index, position_threshold, angle_threshold,
                                                waypoints, path, robot, dt, path_tracking_mode, cmd);
+        } else if (mode == 2) {
+            is_finished = computeCommandForReedsShepp(target_index, position_threshold, angle_threshold,
+                                                      waypoints, path, robot, dt, path_tracking_mode, cmd);
         }
         updatePose(robot, cmd, dt);
         

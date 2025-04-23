@@ -51,6 +51,46 @@ bool computeCommandForReedsShepp(size_t &target_index, double position_threshold
     return is_finished;
 }
 
+bool computeCommandForGuidelessAGV(size_t &target_index, double position_threshold, double angle_threshold,
+                                   const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
+                                   Pose2D &robot, double dt, int path_tracking_mode, Velocity &cmd)
+{
+    bool is_finished = false;
+
+    Pose2D target = path[target_index];
+    double dx = target.x - robot.x;
+    double dy = target.y - robot.y;
+    double dist = std::hypot(dx, dy);
+    double final_adjustment_distance = 0.3;
+    if (target_index == path.size() - 1 && dist < final_adjustment_distance)
+    {
+        double angle_error = normalizeAngle(waypoints.back().theta - robot.theta);
+        if (std::abs(angle_error) < angle_threshold) {
+            is_finished = true;
+            return is_finished;
+        }
+
+        cmd.linear = 0.0;
+        cmd.angular = std::min(std::max(2.0 * angle_error, -1.0), 1.0);
+    }
+    else
+    {
+
+        if (dist < position_threshold)
+        {
+            target_index++;
+            cmd = {0.0, 0.0};
+        }
+        else
+        {
+            cmd =   path_tracking_mode == 0 ? computeVelocityProportionalControl(robot, target)
+                  : path_tracking_mode == 1 ? computeVelocityPurePursuit(robot, path, target_index)
+                                            : Velocity{0.0, 0.0};
+        }
+    }
+    return is_finished;
+}
+
 bool computeCommandForRTR(int &rtr_state, size_t &target_index, double position_threshold, double angle_threshold,
                          const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
                          Pose2D &robot, double dt, int path_tracking_mode, Velocity &cmd)
