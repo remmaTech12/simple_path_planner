@@ -283,10 +283,10 @@ Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pos
     double dist_to_target = std::hypot(dx, dy);
     double linear = linear_velocity * (dist_to_target / lookahead_distance);
     linear = std::clamp(linear, 0.0, max_linear);
-    if (reverse && allow_backward) linear = -linear;
 
     cmd.linear = linear;
     cmd.angular = std::clamp(linear * kappa, -max_angular, max_angular);
+    if (reverse && allow_backward) cmd.linear = -cmd.linear;
 
     // If heading deviation is large, rotate in place instead of moving forward/backward
     if (std::cos(alpha) < std::cos(M_PI / 10.0)) {
