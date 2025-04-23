@@ -103,10 +103,9 @@ bool computeCommandForRTR(int &rtr_state, size_t &target_index, double position_
         double target_theta = std::atan2(dy, dx);
         double angle_error = normalizeAngle(target_theta - robot.theta);
 
-        if (std::abs(angle_error) < 0.001)
+        if (std::abs(angle_error) < 1e-5)
         {
-            std::cerr << angle_error  << std::endl;
-            rtr_state = 0;
+            rtr_state = 1;
         }
         else
         {
