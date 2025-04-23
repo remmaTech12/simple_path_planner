@@ -12,6 +12,9 @@ namespace ob = ompl::base;
 Velocity computeVelocityProportionalControl(const Pose2D& current, const Pose2D& target);
 Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pose2D>& path, size_t target_index);
 std::vector<Pose2D> generateReedsSheppPath(Pose2D start, Pose2D goal, double step_size);
+bool computeCommandForRTR(int &rtr_state, size_t &target_index, double position_threshold, double angle_threshold,
+                          const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
+                          Pose2D &robot, double dt, int path_tracking_mode, Velocity &cmd);
 
 bool computeCommandForReedsShepp(size_t &target_index, double position_threshold, double angle_threshold,
                                  const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
@@ -51,7 +54,7 @@ bool computeCommandForReedsShepp(size_t &target_index, double position_threshold
     return is_finished;
 }
 
-bool computeCommandForGuidelessAGV(size_t &target_index, double position_threshold, double angle_threshold,
+bool computeCommandForGuidelessAGV(int &rtr_state, size_t &target_index, double position_threshold, double angle_threshold,
                                    const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
                                    Pose2D &robot, double dt, int path_tracking_mode, Velocity &cmd)
 {
@@ -62,20 +65,16 @@ bool computeCommandForGuidelessAGV(size_t &target_index, double position_thresho
     double dy = target.y - robot.y;
     double dist = std::hypot(dx, dy);
     double final_adjustment_distance = 0.3;
+    std::cerr << __LINE__  << std::endl;
     if (target_index == path.size() - 1 && dist < final_adjustment_distance)
     {
-        double angle_error = normalizeAngle(waypoints.back().theta - robot.theta);
-        if (std::abs(angle_error) < angle_threshold) {
-            is_finished = true;
-            return is_finished;
-        }
-
-        cmd.linear = 0.0;
-        cmd.angular = std::min(std::max(2.0 * angle_error, -1.0), 1.0);
+        std::cerr << __LINE__  << std::endl;
+        computeCommandForRTR(rtr_state, target_index, position_threshold, angle_threshold,
+                             waypoints, path, robot, dt, path_tracking_mode, cmd);
     }
     else
     {
-
+        rtr_state = 0;
         if (dist < position_threshold)
         {
             target_index++;
@@ -83,9 +82,7 @@ bool computeCommandForGuidelessAGV(size_t &target_index, double position_thresho
         }
         else
         {
-            cmd =   path_tracking_mode == 0 ? computeVelocityProportionalControl(robot, target)
-                  : path_tracking_mode == 1 ? computeVelocityPurePursuit(robot, path, target_index)
-                                            : Velocity{0.0, 0.0};
+            cmd = computeVelocityPurePursuit(robot, path, target_index);
         }
     }
     return is_finished;
@@ -96,18 +93,20 @@ bool computeCommandForRTR(int &rtr_state, size_t &target_index, double position_
                          Pose2D &robot, double dt, int path_tracking_mode, Velocity &cmd)
 {
     bool is_finished = false;
-    double vx = 0.3;
+    double vx = 0.2;
     double wz = 0.25;
 
+    Pose2D target = path[target_index];
+    std::cerr << target.x << ", " << target.y << ", " << target.theta << std::endl;
     if (rtr_state == 0)
     {
         // Step 1: rotate to face goal
-        double dx = waypoints.back().x - robot.x;
-        double dy = waypoints.back().y - robot.y;
+        double dx = target.x - robot.x;
+        double dy = target.y - robot.y;
         double target_theta = std::atan2(dy, dx);
         double angle_error = normalizeAngle(target_theta - robot.theta);
 
-        if (std::abs(angle_error) < angle_threshold)
+        if (std::abs(angle_error) < 0.01)
         {
             rtr_state = 1;
         }
@@ -120,10 +119,10 @@ bool computeCommandForRTR(int &rtr_state, size_t &target_index, double position_
     else if (rtr_state == 1)
     {
         // Step 2: translate toward goal
-        double dx = waypoints.back().x - robot.x;
-        double dy = waypoints.back().y - robot.y;
+        double dx = target.x - robot.x;
+        double dy = target.y - robot.y;
         double dist = std::hypot(dx, dy);
-        position_threshold = 0.2;
+        position_threshold = 0.02;
 
         if (dist < position_threshold)
         {
@@ -138,7 +137,7 @@ bool computeCommandForRTR(int &rtr_state, size_t &target_index, double position_
     else if (rtr_state == 2)
     {
         // Step 3: rotate to match goal orientation
-        double angle_error = normalizeAngle(waypoints.back().theta - robot.theta);
+        double angle_error = normalizeAngle(target.theta - robot.theta);
         if (std::abs(angle_error) < angle_threshold) is_finished = true;
 
         cmd.linear = 0.0;

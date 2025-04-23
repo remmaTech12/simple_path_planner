@@ -49,8 +49,8 @@ int main() {
             is_finished = computeCommandForRTR(rtr_state, target_index, position_threshold, angle_threshold,
                                                waypoints, path, robot, dt, path_tracking_mode, cmd);
         } else if (mode == 2) {
-            is_finished = computeCommandForReedsShepp(target_index, position_threshold, angle_threshold,
-                                                      waypoints, path, robot, dt, path_tracking_mode, cmd);
+            is_finished = computeCommandForGuidelessAGV(rtr_state, target_index, position_threshold, angle_threshold,
+                                                        waypoints, path, robot, dt, path_tracking_mode, cmd);
         }
         updatePose(robot, cmd, dt);
         
