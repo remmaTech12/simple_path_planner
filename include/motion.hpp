@@ -10,7 +10,7 @@
 namespace ob = ompl::base;
 
 Velocity computeVelocityProportionalControl(const Pose2D& current, const Pose2D& target);
-Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pose2D>& path, size_t target_index);
+Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pose2D>& path, size_t target_index, bool allow_backward = false);
 std::vector<Pose2D> generateReedsSheppPath(Pose2D start, Pose2D goal, double step_size);
 bool computeCommandForRTR(int &rtr_state, size_t &target_index, double position_threshold, double angle_threshold,
                           const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
@@ -80,7 +80,7 @@ bool computeCommandForGuidelessAGV(int &rtr_state, size_t &target_index, double 
         }
         else
         {
-            cmd = computeVelocityPurePursuit(robot, path, target_index);
+            cmd = computeVelocityPurePursuit(robot, path, target_index, true);
         }
     }
     return is_finished;
@@ -220,7 +220,7 @@ Velocity computeVelocityProportionalControl(const Pose2D& current, const Pose2D&
     return cmd;
 }
 
-Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pose2D>& path, size_t target_index) {
+Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pose2D>& path, size_t target_index, bool allow_backward) {
     Velocity cmd = {0.0, 0.0};
     const double lookahead_distance = 0.01;
     const double linear_velocity = 0.3;
@@ -249,7 +249,7 @@ Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pos
     // Convert target point to robot-local coordinates (reverse if necessary)
     double x_r = std::cos(-current.theta) * dx - std::sin(-current.theta) * dy;
     double y_r = std::sin(-current.theta) * dx + std::cos(-current.theta) * dy;
-    if (reverse) {
+    if (reverse && allow_backward) {
         x_r = -x_r;
         y_r = -y_r;
     }
@@ -260,13 +260,13 @@ Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pos
     double dist_to_target = std::hypot(dx, dy);
     double linear = linear_velocity * (dist_to_target / lookahead_distance);
     linear = std::clamp(linear, 0.0, max_linear);
-    if (reverse) linear = -linear;
+    if (reverse && allow_backward) linear = -linear;
 
     cmd.linear = linear;
     cmd.angular = std::clamp(linear * kappa, -max_angular, max_angular);
 
     // If heading deviation is large, rotate in place instead of moving forward/backward
-    if (std::abs(std::cos(alpha)) < std::cos(M_PI / 10.0)) {
+    if (std::cos(alpha) < std::cos(M_PI / 10.0)) {
         cmd.linear = 0.0;
         cmd.angular = std::clamp(2.0 * alpha, -max_angular, max_angular);
     }

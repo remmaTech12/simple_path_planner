@@ -13,7 +13,7 @@ public:
     }
 
     void setupVideoWriter(const std::string& filename, int fps) {
-        video_.open(filename, cv::VideoWriter::fourcc('m', 'p', '4', 'v'), fps, cv::Size(width_, height_));
+        video_.open(filename, cv::VideoWriter::fourcc('a', 'v', 'c', '1'), fps, cv::Size(width_, height_));
         if (!video_.isOpened()) {
             throw std::runtime_error("Could not open the output video file.");
         }
