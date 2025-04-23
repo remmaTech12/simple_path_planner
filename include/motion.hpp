@@ -95,7 +95,7 @@ bool computeCommandForRTR(int &rtr_state, size_t &target_index, double position_
     double wz = 0.2;
 
     position_threshold = 0.02;
-    angle_threshold = 1e-5;
+    angle_threshold = 1e-2;
     Pose2D target = path[target_index];
     if (rtr_state == 0)
     {
