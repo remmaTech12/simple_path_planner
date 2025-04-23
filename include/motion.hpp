@@ -65,10 +65,8 @@ bool computeCommandForGuidelessAGV(int &rtr_state, size_t &target_index, double 
     double dy = target.y - robot.y;
     double dist = std::hypot(dx, dy);
     double final_adjustment_distance = 0.3;
-    std::cerr << __LINE__  << std::endl;
     if (target_index == path.size() - 1 && dist < final_adjustment_distance)
     {
-        std::cerr << __LINE__  << std::endl;
         computeCommandForRTR(rtr_state, target_index, position_threshold, angle_threshold,
                              waypoints, path, robot, dt, path_tracking_mode, cmd);
     }
@@ -94,10 +92,9 @@ bool computeCommandForRTR(int &rtr_state, size_t &target_index, double position_
 {
     bool is_finished = false;
     double vx = 0.2;
-    double wz = 0.25;
+    double wz = 0.1;
 
     Pose2D target = path[target_index];
-    std::cerr << target.x << ", " << target.y << ", " << target.theta << std::endl;
     if (rtr_state == 0)
     {
         // Step 1: rotate to face goal
@@ -106,9 +103,10 @@ bool computeCommandForRTR(int &rtr_state, size_t &target_index, double position_
         double target_theta = std::atan2(dy, dx);
         double angle_error = normalizeAngle(target_theta - robot.theta);
 
-        if (std::abs(angle_error) < 0.01)
+        if (std::abs(angle_error) < 0.001)
         {
-            rtr_state = 1;
+            std::cerr << angle_error  << std::endl;
+            rtr_state = 0;
         }
         else
         {
@@ -229,6 +227,7 @@ Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pos
     const double max_linear = 1.0;
     const double max_angular = M_PI / 2.0;
 
+    // Select a target point that is at least lookahead_distance away
     Pose2D target = path.back();
     for (size_t i = target_index; i < path.size(); ++i) {
         double dx = path[i].x - current.x;
@@ -241,22 +240,36 @@ Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pos
 
     double dx = target.x - current.x;
     double dy = target.y - current.y;
+    double angle_to_target = std::atan2(dy, dx);
+    double angle_diff = std::atan2(std::sin(angle_to_target - current.theta), std::cos(angle_to_target - current.theta));
+
+    // Determine whether to reverse if the angular difference exceeds 90 degrees
+    bool reverse = std::abs(angle_diff) > M_PI / 2.0;
+
+    // Convert target point to robot-local coordinates (reverse if necessary)
     double x_r = std::cos(-current.theta) * dx - std::sin(-current.theta) * dy;
     double y_r = std::sin(-current.theta) * dx + std::cos(-current.theta) * dy;
+    if (reverse) {
+        x_r = -x_r;
+        y_r = -y_r;
+    }
+
     double alpha = std::atan2(y_r, x_r);
     double kappa = 2.0 * std::sin(alpha) / lookahead_distance;
 
-    double dist_to_target = std::hypot(target.x - current.x, target.y - current.y);
+    double dist_to_target = std::hypot(dx, dy);
     double linear = linear_velocity * (dist_to_target / lookahead_distance);
     linear = std::clamp(linear, 0.0, max_linear);
+    if (reverse) linear = -linear;
 
     cmd.linear = linear;
     cmd.angular = std::clamp(linear * kappa, -max_angular, max_angular);
 
-    // Rotate in place when angular deviation is large
+    // If heading deviation is large, rotate in place instead of moving forward/backward
     if (std::abs(std::cos(alpha)) < std::cos(M_PI / 10.0)) {
         cmd.linear = 0.0;
         cmd.angular = std::clamp(2.0 * alpha, -max_angular, max_angular);
     }
+
     return cmd;
 }
