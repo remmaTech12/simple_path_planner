@@ -67,8 +67,8 @@ bool computeCommandForGuidelessAGV(int &rtr_state, size_t &target_index, double 
     double final_adjustment_distance = 0.3;
     if (target_index == path.size() - 1 && dist < final_adjustment_distance)
     {
-        computeCommandForRTR(rtr_state, target_index, position_threshold, angle_threshold,
-                             waypoints, path, robot, dt, path_tracking_mode, cmd);
+        return computeCommandForRTR(rtr_state, target_index, position_threshold, angle_threshold,
+                                    waypoints, path, robot, dt, path_tracking_mode, cmd);
     }
     else
     {
@@ -92,8 +92,10 @@ bool computeCommandForRTR(int &rtr_state, size_t &target_index, double position_
 {
     bool is_finished = false;
     double vx = 0.2;
-    double wz = 0.1;
+    double wz = 0.2;
 
+    position_threshold = 0.02;
+    angle_threshold = 1e-5;
     Pose2D target = path[target_index];
     if (rtr_state == 0)
     {
@@ -103,7 +105,7 @@ bool computeCommandForRTR(int &rtr_state, size_t &target_index, double position_
         double target_theta = std::atan2(dy, dx);
         double angle_error = normalizeAngle(target_theta - robot.theta);
 
-        if (std::abs(angle_error) < 1e-5)
+        if (std::abs(angle_error) < angle_threshold)
         {
             rtr_state = 1;
         }
@@ -119,7 +121,6 @@ bool computeCommandForRTR(int &rtr_state, size_t &target_index, double position_
         double dx = target.x - robot.x;
         double dy = target.y - robot.y;
         double dist = std::hypot(dx, dy);
-        position_threshold = 0.02;
 
         if (dist < position_threshold)
         {
