@@ -1,38 +1,55 @@
 #include "include/util.hpp"
 #include "include/draw.hpp"
 #include "include/motion.hpp"
+#include <csignal> // For signal handling
+
+Draw* global_draw_ptr = nullptr; // Pointer for signal handler
+
+// Signal handler to release video on Ctrl+C
+void handle_sigint(int) {
+    if (global_draw_ptr) {
+        global_draw_ptr->releaseVideo();
+        std::cout << "\nVideo saved on SIGINT (Ctrl+C)." << std::endl;
+    }
+    std::_Exit(0); // Immediate exit
+}
 
 int main() {
     // Draw setup
     const int scale = 200;
     const int width = 600, height = 600;
     Draw draw(width, height, scale);
+    global_draw_ptr = &draw; // Register global pointer for signal handler
+
     const std::string video_filename = "output.mp4";
     draw.setupVideoWriter(video_filename, 30);
 
-    // start and goal information
+    // Register SIGINT handler
+    std::signal(SIGINT, handle_sigint);
+
+    // Start and goal information
     std::vector<Pose2D> waypoints = {
         {1.0, -1.0, 0.0},
-        {-1.0, -1.0, 0.0},
+        {-0.2, -0.0, 0.0},
         {-0.75, 0.25, M_PI / 4},
         {-0.5, 0.5, M_PI / 4},
         {0.25, 0.25, M_PI / 4},
         {1.0, 1.0, M_PI / 2}};
 
-    // parameters
+    // Parameters
     int mode = 2; // 0: Reeds-Shepp tracking, 1: rotate-translate-rotate, 2: guideless AGV
     int path_tracking_mode = 1; // 0: P control, 1: Pure pursuit
     double dt = 0.1;
     double position_threshold = 0.05;
     double angle_threshold = 0.05;
 
-    // state
+    // State
     Pose2D robot = waypoints[0];
     size_t target_index = 0;
-    int rtr_state = 0;  // 0: rotate to face goal, 1: move forward, 2: rotate to goal orientation
+    int rtr_state = 0;
     int frame_count = 0;
 
-    // waypoints creation
+    // Waypoints creation
     std::vector<Pose2D> path;
     if (mode == 0) {
         path = generateReedsSheppPathFromWaypoints(waypoints);
@@ -42,6 +59,7 @@ int main() {
     while (true) {
         Velocity cmd;
         bool is_finished = false;
+
         if (mode == 0) {
             is_finished = computeCommandForReedsShepp(target_index, position_threshold, angle_threshold,
                                                       waypoints, path, robot, dt, path_tracking_mode, cmd);
@@ -52,8 +70,9 @@ int main() {
             is_finished = computeCommandForGuidelessAGV(rtr_state, target_index, position_threshold, angle_threshold,
                                                         waypoints, path, robot, dt, path_tracking_mode, cmd);
         }
+
         updatePose(robot, cmd, dt);
-        
+
         draw.draw(mode, robot, path);
         frame_count++;
 

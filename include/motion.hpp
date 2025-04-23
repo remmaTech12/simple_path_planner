@@ -266,6 +266,9 @@ Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pos
 
     // If heading deviation is large, rotate in place instead of moving forward/backward
     if (std::abs(std::cos(alpha)) < std::cos(M_PI / 10.0)) {
+        // cmd.linear = 0.0;
+        cmd.angular = std::clamp(2.0 * alpha, -max_angular, max_angular);
+    } else if (std::abs(std::cos(alpha)) < std::cos(M_PI / 4.0)) {
         cmd.linear = 0.0;
         cmd.angular = std::clamp(2.0 * alpha, -max_angular, max_angular);
     }
