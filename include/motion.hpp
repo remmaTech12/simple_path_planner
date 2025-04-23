@@ -9,12 +9,16 @@
 #include <algorithm>
 namespace ob = ompl::base;
 
+bool rtr_reverse_ = false;
+double rtr_moved_distance_ = 0.0;
+Pose2D prev_robot_pose_ = {0.0, 0.0, 0.0};
+
 Velocity computeVelocityProportionalControl(const Pose2D& current, const Pose2D& target);
 Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pose2D>& path, size_t target_index, bool allow_backward = false);
 std::vector<Pose2D> generateReedsSheppPath(Pose2D start, Pose2D goal, double step_size);
 bool computeCommandForRTR(int &rtr_state, size_t &target_index, double position_threshold, double angle_threshold,
                           const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
-                          Pose2D &robot, double dt, int path_tracking_mode, Velocity &cmd);
+                          Pose2D &robot, double dt, int path_tracking_mode, Velocity &cmd, bool allow_backward);
 
 bool computeCommandForReedsShepp(size_t &target_index, double position_threshold, double angle_threshold,
                                  const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
@@ -68,7 +72,7 @@ bool computeCommandForGuidelessAGV(int &rtr_state, size_t &target_index, double 
     if (target_index == path.size() - 1 && dist < final_adjustment_distance)
     {
         return computeCommandForRTR(rtr_state, target_index, position_threshold, angle_threshold,
-                                    waypoints, path, robot, dt, path_tracking_mode, cmd);
+                                    waypoints, path, robot, dt, path_tracking_mode, cmd, true);
     }
     else
     {
@@ -87,15 +91,15 @@ bool computeCommandForGuidelessAGV(int &rtr_state, size_t &target_index, double 
 }
 
 bool computeCommandForRTR(int &rtr_state, size_t &target_index, double position_threshold, double angle_threshold,
-                         const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
-                         Pose2D &robot, double dt, int path_tracking_mode, Velocity &cmd)
+                          const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
+                          Pose2D &robot, double dt, int path_tracking_mode, Velocity &cmd, bool allow_backward = false)
 {
     bool is_finished = false;
     double vx = 0.2;
     double wz = 0.2;
 
     position_threshold = 0.02;
-    angle_threshold = 1e-2;
+    angle_threshold = 0.05;
     Pose2D target = path[target_index];
     if (rtr_state == 0)
     {
@@ -104,6 +108,13 @@ bool computeCommandForRTR(int &rtr_state, size_t &target_index, double position_
         double dy = target.y - robot.y;
         double target_theta = std::atan2(dy, dx);
         double angle_error = normalizeAngle(target_theta - robot.theta);
+        if (std::cos(angle_error) < 0.0)
+        {
+            angle_error = normalizeAngle(angle_error + M_PI);
+            rtr_reverse_ = true;
+        } else {
+            rtr_reverse_ = false;
+        }
 
         if (std::abs(angle_error) < angle_threshold)
         {
@@ -121,13 +132,24 @@ bool computeCommandForRTR(int &rtr_state, size_t &target_index, double position_
         double dx = target.x - robot.x;
         double dy = target.y - robot.y;
         double dist = std::hypot(dx, dy);
+        double mdx = robot.x - prev_robot_pose_.x;
+        double mdy = robot.y - prev_robot_pose_.y;
+        rtr_moved_distance_ += std::sqrt(mdx * mdx + mdy * mdy);
 
         if (dist < position_threshold)
         {
             rtr_state = 2;
         }
+        else if (rtr_moved_distance_ > 0.3) {
+            rtr_state = 0;
+            rtr_moved_distance_ = 0.0;
+        }
         else
         {
+            if (rtr_reverse_)
+            {
+                vx = -vx;
+            }
             cmd.linear = vx;
             cmd.angular = 0.0;
         }
@@ -141,6 +163,7 @@ bool computeCommandForRTR(int &rtr_state, size_t &target_index, double position_
         cmd.linear = 0.0;
         cmd.angular = std::clamp(2.0 * angle_error, -wz, wz);
     }
+    prev_robot_pose_ = robot;
     return is_finished;
 }
 

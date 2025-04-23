@@ -29,14 +29,16 @@ int main() {
 
     // Start and goal information
     std::vector<Pose2D> waypoints = {
-        {1.0, -1.0, 0.0},
-        {-1.0, -1.0, 0.0},
-        {-0.9, -0.5, M_PI / 4},
-        {-0.5, -0.1, M_PI / 4},
-        {0.0, 0.0, M_PI / 4},
-        {0.5, 0.1, M_PI / 4},
-        {0.9, 0.5, M_PI / 4},
-        {1.0, 1.0, M_PI / 2}};
+        {-0.615, -0.98, 0.0},
+        {-0.95, -0.56, 0.0},
+        {-0.925, -0.005, 0.0},
+        {-0.2, 0.275, 0.0},
+        {0.355, -0.1, 0.0},
+        {0.77, 0.18, 0.0},
+        {0.69, 0.69, 0.0},
+        {0.19, 0.935, 0.0},
+        {-0.58, 0.915, 0.0},
+    };
 
     // Parameters
     int mode = 2; // 0: Reeds-Shepp tracking, 1: rotate-translate-rotate, 2: guideless AGV
@@ -67,7 +69,7 @@ int main() {
                                                       waypoints, path, robot, dt, path_tracking_mode, cmd);
         } else if (mode == 1) {
             is_finished = computeCommandForRTR(rtr_state, target_index, position_threshold, angle_threshold,
-                                               waypoints, path, robot, dt, path_tracking_mode, cmd);
+                                               waypoints, path, robot, dt, path_tracking_mode, cmd, false);
         } else if (mode == 2) {
             is_finished = computeCommandForGuidelessAGV(rtr_state, target_index, position_threshold, angle_threshold,
                                                         waypoints, path, robot, dt, path_tracking_mode, cmd);
