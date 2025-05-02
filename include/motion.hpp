@@ -75,12 +75,26 @@ bool computeCommandForGuidelessAGV(int &rtr_state, size_t &target_index, double 
     double dy = target.y - robot.y;
     double dist = std::hypot(dx, dy);
     double final_adjustment_distance = 0.3;
+
+    if (target_index == path.size()) {
+        cmd = {0.0, 0.0};
+        Pose2D goal = path.back();
+        Pose2D prev_goal = path[path.size() - 2];
+        std::cout << "goal pose: " << goal.x << ", " << goal.y << ", "
+                  << std::atan2(goal.y - prev_goal.y, goal.x - prev_goal.x) << std::endl;
+        std::cout << "robot pose: " << robot.x << ", " << robot.y << ", " << robot.theta << std::endl;
+        return true;
+    }
+
+    /*
     if (target_index == path.size() - 1 && dist < final_adjustment_distance)
     {
-        return computeCommandForRTR(rtr_state, target_index, position_threshold, angle_threshold,
-                                    waypoints, path, robot, dt, path_tracking_mode, cmd, true);
+        //return computeCommandForRTR(rtr_state, target_index, position_threshold, angle_threshold,
+        //                            waypoints, path, robot, dt, path_tracking_mode, cmd, true);
+        cmd = computeVelocityGuidelessAGV(robot, path, target_index, false);
     }
     else
+    */
     {
         if (target_index != prev_target_id)
         {
@@ -91,6 +105,7 @@ bool computeCommandForGuidelessAGV(int &rtr_state, size_t &target_index, double 
 
         if (dist < position_threshold)
         {
+            std::cout << __LINE__ << std::endl;
             target_index++;
             cmd = {0.0, 0.0};
         }
@@ -112,7 +127,10 @@ bool computeCommandForGuidelessAGV(int &rtr_state, size_t &target_index, double 
             // check if both inner products are positive
             const double inner_product1 = dpc.x * dpr.x + dpc.y * dpr.y;
             const double inner_product2 = dpc.x * dcr.x + dpc.y * dcr.y;
-            if (inner_product1 > 0.0 && inner_product2 > 0.0) target_index++;
+            if (inner_product1 > 0.0 && inner_product2 > 0.0) {
+                std::cout << "line: " << __LINE__ << std::endl;
+                target_index++;
+            }
         }
         //cmd = computeVelocityPurePursuit(robot, path, target_index, false);
         cmd = computeVelocityGuidelessAGV(robot, path, target_index, false);
@@ -353,12 +371,16 @@ Velocity computeVelocityGuidelessAGV(const Pose2D& robot, const std::vector<Pose
     Velocity cmd_vel = {0.0, 0.0};
 
     // Parameters
-    const double max_vx = 1.0;
-    const double min_vx = 0.02;
-    const double max_wz = M_PI / 4.0;
-    const double i_lat_max_err = 1.0;
-    const double i_yaw_max_err = M_PI;
+    double max_vx = 1.0;
+    double min_vx = 0.02;
+    double max_wz = M_PI / 4.0;
+    double i_lat_max_err = 1.0;
+    double i_yaw_max_err = M_PI;
     double lookahead_distance = 0.15;
+    double P_lat = 50.0;
+    double I_lat = 5.0;
+    double P_yaw = 2.0;
+    double I_yaw = 1.0;
 
     // Calculate the lookahead point
     Pose2D robot_ahead = robot;
@@ -369,6 +391,13 @@ Velocity computeVelocityGuidelessAGV(const Pose2D& robot, const std::vector<Pose
     std::cout << target_id << std::endl;
     if (target_id < 1 || target_id >= goal.size()) {
         return cmd_vel;
+    }
+    if (target_id == goal.size() - 1) {
+        max_vx = calc_distance(robot, goal[target_id]);
+        min_vx = 0.0;
+        lookahead_distance = 0.0;
+        P_lat = 50.0;
+        I_lat = 5.0;
     }
 
     // Calculate lat and yaw error
@@ -383,12 +412,6 @@ Velocity computeVelocityGuidelessAGV(const Pose2D& robot, const std::vector<Pose
     bool reverse = std::abs(yaw_err) > M_PI / 2.0;
     if (reverse && allow_backward) {
     }
-
-    // PID parameters
-    constexpr double P_lat = 50.0;
-    constexpr double I_lat = 5.0;
-    constexpr double P_yaw = 2.0;
-    constexpr double I_yaw = 1.0;
 
     // Calculate linear and angular velocities
     constexpr double vx_lat_err_gain = 7.0;
