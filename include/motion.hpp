@@ -18,20 +18,20 @@ double i_yaw_err = 0.0;
 int prev_target_id = -1;
 
 Velocity computeVelocityProportionalControl(const Pose2D& current, const Pose2D& target);
-Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pose2D>& path, size_t target_index, bool allow_backward = false);
-Velocity computeVelocityGuidelessAGV(const Pose2D& robot, const std::vector<Pose2D>& goal, size_t target_id, bool allow_backward = false);
+Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pose2D>& path, size_t target_id, bool allow_backward = false);
+Velocity computeVelocityLinetrace(const Pose2D& robot, const std::vector<Pose2D>& goal, size_t target_id, bool allow_backward = false);
 std::vector<Pose2D> generateReedsSheppPath(Pose2D start, Pose2D goal, double step_size);
-bool computeCommandForRTR(int &rtr_state, size_t &target_index, double position_threshold, double angle_threshold,
+bool computeCommandForRTR(int &rtr_state, size_t &target_id, double position_threshold, double angle_threshold,
                           const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
                           Pose2D &robot, double dt, int path_tracking_mode, Velocity &cmd, bool allow_backward);
 double calc_distance(const Pose2D& a, const Pose2D& b);
 
-bool computeCommandForReedsShepp(size_t &target_index, double position_threshold, double angle_threshold,
+bool computeCommandForReedsShepp(size_t &target_id, double position_threshold, double angle_threshold,
                                  const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
                                  Pose2D &robot, double dt, int path_tracking_mode, Velocity &cmd)
 {
     bool is_finished = false;
-    if (target_index >= path.size())
+    if (target_id >= path.size())
     {
         double angle_error = normalizeAngle(waypoints.back().theta - robot.theta);
         if (std::abs(angle_error) < angle_threshold) {
@@ -44,40 +44,40 @@ bool computeCommandForReedsShepp(size_t &target_index, double position_threshold
     }
     else
     {
-        Pose2D target = path[target_index];
+        Pose2D target = path[target_id];
         double dx = target.x - robot.x;
         double dy = target.y - robot.y;
         double dist = std::hypot(dx, dy);
 
         if (dist < position_threshold)
         {
-            target_index++;
+            target_id++;
             cmd = {0.0, 0.0};
         }
         else
         {
             cmd =   path_tracking_mode == 0 ? computeVelocityProportionalControl(robot, target)
-                  : path_tracking_mode == 1 ? computeVelocityPurePursuit(robot, path, target_index)
+                  : path_tracking_mode == 1 ? computeVelocityPurePursuit(robot, path, target_id)
                                             : Velocity{0.0, 0.0};
         }
     }
     return is_finished;
 }
 
-bool computeCommandForGuidelessAGV_pprtr(int &rtr_state, size_t &target_index, double position_threshold, double angle_threshold,
+bool computeCommandForGuidelessAGV_pprtr(int &rtr_state, size_t &target_id, double position_threshold, double angle_threshold,
                                    const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
                                    Pose2D &robot, double dt, int path_tracking_mode, Velocity &cmd)
 {
     bool is_finished = false;
 
-    Pose2D target = path[target_index];
+    Pose2D target = path[target_id];
     double dx = target.x - robot.x;
     double dy = target.y - robot.y;
     double dist = std::hypot(dx, dy);
     double final_adjustment_distance = 0.3;
-    if (target_index == path.size() - 1 && dist < final_adjustment_distance)
+    if (target_id == path.size() - 1 && dist < final_adjustment_distance)
     {
-        return computeCommandForRTR(rtr_state, target_index, position_threshold, angle_threshold,
+        return computeCommandForRTR(rtr_state, target_id, position_threshold, angle_threshold,
                                     waypoints, path, robot, dt, path_tracking_mode, cmd, true);
     }
     else
@@ -85,92 +85,78 @@ bool computeCommandForGuidelessAGV_pprtr(int &rtr_state, size_t &target_index, d
         rtr_state = 0;
         if (dist < position_threshold)
         {
-            target_index++;
+            target_id++;
             cmd = {0.0, 0.0};
         }
         else
         {
-            cmd = computeVelocityPurePursuit(robot, path, target_index, true);
+            cmd = computeVelocityPurePursuit(robot, path, target_id, true);
         }
     }
     return is_finished;
 }
 
-bool computeCommandForGuidelessAGV(int &rtr_state, size_t &target_index, double position_threshold, double angle_threshold,
+bool computeCommandForGuidelessAGV(int &rtr_state, size_t &target_id, double position_threshold, double angle_threshold,
                                    const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
                                    Pose2D &robot, double dt, int path_tracking_mode, Velocity &cmd)
 {
-    bool is_finished = false;
-
-    Pose2D target = path[target_index];
-    double dx = target.x - robot.x;
-    double dy = target.y - robot.y;
-    double dist = std::hypot(dx, dy);
-    double final_adjustment_distance = 0.3;
-
-    if (target_index == path.size()) {
+    if (target_id == path.size()) {
         cmd = {0.0, 0.0};
         Pose2D goal = path.back();
         Pose2D prev_goal = path[path.size() - 2];
-        std::cout << "goal pose: " << goal.x << ", " << goal.y << ", "
-                  << std::atan2(goal.y - prev_goal.y, goal.x - prev_goal.x) << std::endl;
+        const double goal_angle = std::atan2(goal.y - prev_goal.y, goal.x - prev_goal.x);
+        std::cout << "goal pose: " << goal.x << ", " << goal.y << ", " << goal_angle << std::endl;
         std::cout << "robot pose: " << robot.x << ", " << robot.y << ", " << robot.theta << std::endl;
+        std::cout << "deviation x: " << goal.x - robot.x << ", y: " << goal.y - robot.y << ", "
+                  << "theta: " << normalizeAngle(std::atan2(goal.y - prev_goal.y, goal.x - prev_goal.x) - robot.theta) << std::endl;
         return true;
     }
 
-    /*
-    if (target_index == path.size() - 1 && dist < final_adjustment_distance)
-    {
-        //return computeCommandForRTR(rtr_state, target_index, position_threshold, angle_threshold,
-        //                            waypoints, path, robot, dt, path_tracking_mode, cmd, true);
-        cmd = computeVelocityGuidelessAGV(robot, path, target_index, false);
-    }
-    else
-    */
-    {
-        if (target_index != prev_target_id)
-        {
-            i_lat_err = 0.0;
-            i_yaw_err = 0.0;
-            prev_target_id = target_index;
-        }
+    Pose2D target = path[target_id];
+    double dx = target.x - robot.x;
+    double dy = target.y - robot.y;
+    double dist = std::hypot(dx, dy);
 
-        if (dist < position_threshold)
-        {
-            std::cout << __LINE__ << std::endl;
-            target_index++;
-            cmd = {0.0, 0.0};
-        }
-        else if (target_index >= 1)
-        {
-            // from previous goal to current goal
-            Pose2D dpc = {path[target_index].x - path[target_index - 1].x,
-                          path[target_index].y - path[target_index - 1].y,
-                          path[target_index].theta - path[target_index - 1].theta};
-            // from previous goal to robot
-            Pose2D dpr = {robot.x - path[target_index - 1].x,
-                          robot.y - path[target_index - 1].y,
-                          robot.theta - path[target_index - 1].theta};
-            // from current goal to robot
-            Pose2D dcr = {robot.x - path[target_index].x,
-                          robot.y - path[target_index].y,
-                          robot.theta - path[target_index].theta};
-
-            // check if both inner products are positive
-            const double inner_product1 = dpc.x * dpr.x + dpc.y * dpr.y;
-            const double inner_product2 = dpc.x * dcr.x + dpc.y * dcr.y;
-            if (inner_product1 > 0.0 && inner_product2 > 0.0) {
-                std::cout << "line: " << __LINE__ << std::endl;
-                target_index++;
-            }
-        }
-        //cmd = computeVelocityPurePursuit(robot, path, target_index, false);
-        cmd = computeVelocityGuidelessAGV(robot, path, target_index, false);
+    if (target_id != prev_target_id)
+    {
+        i_lat_err = 0.0;
+        i_yaw_err = 0.0;
+        prev_target_id = target_id;
     }
-    return is_finished;
+
+    if (dist < position_threshold)
+    {
+        target_id++;
+    }
+    else if (target_id >= 1)
+    {
+        // from previous goal to current goal
+        Pose2D dpc = {path[target_id].x - path[target_id - 1].x,
+                      path[target_id].y - path[target_id - 1].y,
+                      path[target_id].theta - path[target_id - 1].theta};
+
+        // from previous goal to robot
+        Pose2D dpr = {robot.x - path[target_id - 1].x,
+                      robot.y - path[target_id - 1].y,
+                      robot.theta - path[target_id - 1].theta};
+        // from current goal to robot
+        Pose2D dcr = {robot.x - path[target_id].x,
+                      robot.y - path[target_id].y,
+                      robot.theta - path[target_id].theta};
+
+        // check if both inner products are positive
+        const double inner_product1 = dpc.x * dpr.x + dpc.y * dpr.y;
+        const double inner_product2 = dpc.x * dcr.x + dpc.y * dcr.y;
+        if (inner_product1 > 0.0 && inner_product2 > 0.0)
+        {
+            target_id++;
+        }
+    }
+    cmd = computeVelocityLinetrace(robot, path, target_id, false);
+    return false;
 }
 
-bool computeCommandForRTR(int &rtr_state, size_t &target_index, double position_threshold, double angle_threshold,
+bool computeCommandForRTR(int &rtr_state, size_t &target_id, double position_threshold, double angle_threshold,
                           const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
                           Pose2D &robot, double dt, int path_tracking_mode, Velocity &cmd, bool allow_backward = false)
 {
@@ -180,7 +166,7 @@ bool computeCommandForRTR(int &rtr_state, size_t &target_index, double position_
 
     position_threshold = 0.02;
     angle_threshold = 0.05;
-    Pose2D target = path[target_index];
+    Pose2D target = path[target_id];
     if (rtr_state == 0)
     {
         // Step 1: rotate to face goal
@@ -320,7 +306,7 @@ Velocity computeVelocityProportionalControl(const Pose2D& current, const Pose2D&
     return cmd;
 }
 
-Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pose2D>& path, size_t target_index, bool allow_backward) {
+Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pose2D>& path, size_t target_id, bool allow_backward) {
     Velocity cmd = {0.0, 0.0};
     const double lookahead_distance = 0.5;
     const double linear_velocity = 1.0;
@@ -328,16 +314,16 @@ Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pos
     const double max_angular = M_PI / 2.0;
 
     // Select a target point that is at least lookahead_distance away
-    Pose2D target = path[target_index];
-    std::cout << target_index << std::endl;
+    Pose2D target = path[target_id];
+    std::cout << target_id << std::endl;
     /*
     Pose2D target = path.back();
-    for (size_t i = target_index; i < path.size(); ++i) {
+    for (size_t i = target_id; i < path.size(); ++i) {
         double dx = path[i].x - current.x;
         double dy = path[i].y - current.y;
         if (std::hypot(dx, dy) >= lookahead_distance) {
             target = path[i];
-            target_index = i;
+            target_id = i;
             break;
         }
     }
@@ -399,7 +385,7 @@ std::tuple<double, double> calc_error(Pose2D next, Pose2D previous, Pose2D robot
     return {lat, yaw};
 }
 
-Velocity computeVelocityGuidelessAGV(const Pose2D& robot, const std::vector<Pose2D>& goal, size_t target_id, bool allow_backward) {
+Velocity computeVelocityLinetrace(const Pose2D& robot, const std::vector<Pose2D>& goal, size_t target_id, bool allow_backward) {
     Velocity cmd_vel = {0.0, 0.0};
 
     // Parameters
