@@ -27,7 +27,7 @@ public:
         clearCanvas();
 
         // Draw planned path (for mode 0)
-        if (mode == 0 || mode == 2) {
+        if (mode != 1) {
             drawPlannedPath(path);
         }
         trajectory_.push_back(toPixel(robot));

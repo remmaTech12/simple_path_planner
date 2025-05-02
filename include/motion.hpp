@@ -64,6 +64,38 @@ bool computeCommandForReedsShepp(size_t &target_index, double position_threshold
     return is_finished;
 }
 
+bool computeCommandForGuidelessAGV_pprtr(int &rtr_state, size_t &target_index, double position_threshold, double angle_threshold,
+                                   const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
+                                   Pose2D &robot, double dt, int path_tracking_mode, Velocity &cmd)
+{
+    bool is_finished = false;
+
+    Pose2D target = path[target_index];
+    double dx = target.x - robot.x;
+    double dy = target.y - robot.y;
+    double dist = std::hypot(dx, dy);
+    double final_adjustment_distance = 0.3;
+    if (target_index == path.size() - 1 && dist < final_adjustment_distance)
+    {
+        return computeCommandForRTR(rtr_state, target_index, position_threshold, angle_threshold,
+                                    waypoints, path, robot, dt, path_tracking_mode, cmd, true);
+    }
+    else
+    {
+        rtr_state = 0;
+        if (dist < position_threshold)
+        {
+            target_index++;
+            cmd = {0.0, 0.0};
+        }
+        else
+        {
+            cmd = computeVelocityPurePursuit(robot, path, target_index, true);
+        }
+    }
+    return is_finished;
+}
+
 bool computeCommandForGuidelessAGV(int &rtr_state, size_t &target_index, double position_threshold, double angle_threshold,
                                    const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
                                    Pose2D &robot, double dt, int path_tracking_mode, Velocity &cmd)
