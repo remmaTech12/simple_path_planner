@@ -24,6 +24,7 @@ std::vector<Pose2D> generateReedsSheppPath(Pose2D start, Pose2D goal, double ste
 bool computeCommandForRTR(int &rtr_state, size_t &target_index, double position_threshold, double angle_threshold,
                           const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
                           Pose2D &robot, double dt, int path_tracking_mode, Velocity &cmd, bool allow_backward);
+double calc_distance(const Pose2D& a, const Pose2D& b);
 
 bool computeCommandForReedsShepp(size_t &target_index, double position_threshold, double angle_threshold,
                                  const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
@@ -81,25 +82,37 @@ bool computeCommandForGuidelessAGV(int &rtr_state, size_t &target_index, double 
     }
     else
     {
-        rtr_state = 0;
+        if (target_index != prev_target_id)
+        {
+            i_lat_err = 0.0;
+            i_yaw_err = 0.0;
+            prev_target_id = target_index;
+        }
+
         if (dist < position_threshold)
         {
             target_index++;
             cmd = {0.0, 0.0};
         }
-        else if (target_index + 1 < path.size())
+        else if (target_index >= 1)
         {
-            // from robot to next goal
-            Pose2D drn = {path[target_index + 1].x - robot.x,
-                          path[target_index + 1].y - robot.y,
-                          path[target_index + 1].theta - robot.theta};
-            // from robot to current goal
-            Pose2D drc = {path[target_index].x - robot.x,
-                          path[target_index].y - robot.y,
-                          path[target_index].theta - robot.theta};
-            // check if inner product is positive
-            double inner_product = drn.x * drc.x + drn.y * drc.y;
-            if (inner_product < 0.0) target_index++;
+            // from previous goal to current goal
+            Pose2D dpc = {path[target_index].x - path[target_index - 1].x,
+                          path[target_index].y - path[target_index - 1].y,
+                          path[target_index].theta - path[target_index - 1].theta};
+            // from previous goal to robot
+            Pose2D dpr = {robot.x - path[target_index - 1].x,
+                          robot.y - path[target_index - 1].y,
+                          robot.theta - path[target_index - 1].theta};
+            // from current goal to robot
+            Pose2D dcr = {robot.x - path[target_index].x,
+                          robot.y - path[target_index].y,
+                          robot.theta - path[target_index].theta};
+
+            // check if both inner products are positive
+            const double inner_product1 = dpc.x * dpr.x + dpc.y * dpr.y;
+            const double inner_product2 = dpc.x * dcr.x + dpc.y * dcr.y;
+            if (inner_product1 > 0.0 && inner_product2 > 0.0) target_index++;
         }
         //cmd = computeVelocityPurePursuit(robot, path, target_index, false);
         cmd = computeVelocityGuidelessAGV(robot, path, target_index, false);
@@ -319,6 +332,10 @@ Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pos
     return cmd;
 }
 
+double calc_distance(const Pose2D& a, const Pose2D& b) {
+    return std::hypot(a.x - b.x, a.y - b.y);
+}
+
 std::tuple<double, double> calc_error(Pose2D next, Pose2D previous, Pose2D robot) {
     double dpn_x = next.x - previous.x;
     double dpn_y = next.y - previous.y;
@@ -339,7 +356,7 @@ Velocity computeVelocityGuidelessAGV(const Pose2D& robot, const std::vector<Pose
     Velocity cmd_vel = {0.0, 0.0};
 
     // Parameters
-    const double max_vx = 0.5;
+    const double max_vx = 1.0;
     const double min_vx = 0.02;
     const double max_wz = M_PI / 4.0;
     const double i_lat_max_err = 1.0;
@@ -358,11 +375,6 @@ Velocity computeVelocityGuidelessAGV(const Pose2D& robot, const std::vector<Pose
     }
 
     // Calculate lat and yaw error
-    if (target_id != prev_target_id) {
-        i_lat_err = 0.0;
-        i_yaw_err = 0.0;
-        prev_target_id = target_id;
-    }
     double lat_err = std::get<0>(calc_error(goal[target_id], goal[target_id - 1], robot_ahead));
     double yaw_err = std::get<1>(calc_error(goal[target_id], goal[target_id - 1], robot_ahead));
     i_lat_err += lat_err;
@@ -382,7 +394,9 @@ Velocity computeVelocityGuidelessAGV(const Pose2D& robot, const std::vector<Pose
     constexpr double I_yaw = 1.0;
 
     // Calculate linear and angular velocities
-    double vx = max_vx * std::max(0.0, 1.0 - std::abs(lat_err) - std::abs(yaw_err));
+    constexpr double vx_lat_err_gain = 7.0;
+    constexpr double vx_yaw_err_gain = 1.0;
+    double vx = max_vx * std::max(0.0, 1.0 - vx_lat_err_gain * std::abs(lat_err) - vx_yaw_err_gain * std::abs(yaw_err));
     double wz = -(P_lat * lat_err + I_lat * i_lat_err) - (P_yaw * yaw_err + I_yaw * i_yaw_err);
     cmd_vel.linear = std::clamp(vx, min_vx, max_vx); // cmd_vel.linear = max_vx;  // simple command
     cmd_vel.angular = std::clamp(wz, -max_wz, max_wz);
