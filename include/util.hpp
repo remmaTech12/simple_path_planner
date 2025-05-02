@@ -20,6 +20,10 @@ double normalizeAngle(double angle) {
     return angle;
 }
 
+double sign(double value) {
+    return value >= 0 ? 1.0 : -1.0;
+}
+
 void updatePose(Pose2D& pose, const Velocity& cmd, double dt) {
     pose.x += cmd.linear * std::cos(pose.theta) * dt;
     pose.y += cmd.linear * std::sin(pose.theta) * dt;
