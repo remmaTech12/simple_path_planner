@@ -113,9 +113,7 @@ int main() {
 
     // Waypoints creation
     std::vector<Pose2D> path;
-    if (mode == 0) {
-        path = generateReedsSheppPathFromWaypoints(waypoints);
-    }
+    // path = generateReedsSheppPathFromWaypoints(waypoints);
     path = waypoints;
 
     while (true) {

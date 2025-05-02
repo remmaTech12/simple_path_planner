@@ -207,16 +207,13 @@ std::vector<Pose2D> generateReedsSheppPathFromWaypoints(const std::vector<Pose2D
             segment.erase(segment.begin());
         path.insert(path.end(), segment.begin(), segment.end());
     }
-    // path = waypoints; // use waypoints directly
 
     // output path info to console
-    /*
     std::cout << "Generated path:" << std::endl;
     for (const auto &p : path)
     {
         std::cout << "x: " << p.x << ", y: " << p.y << ", theta: " << p.theta << std::endl;
     }
-    */
     return path;
 }
 
@@ -282,7 +279,7 @@ Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pos
 
     // Select a target point that is at least lookahead_distance away
     Pose2D target = path[target_index];
-    std::cerr << target_index << std::endl;
+    std::cout << target_index << std::endl;
     /*
     Pose2D target = path.back();
     for (size_t i = target_index; i < path.size(); ++i) {
@@ -369,7 +366,7 @@ Velocity computeVelocityGuidelessAGV(const Pose2D& robot, const std::vector<Pose
     robot_ahead.y += lookahead_distance * std::sin(robot.theta);
 
     // Check if target_id is within bounds
-    std::cerr << target_id << std::endl;
+    std::cout << target_id << std::endl;
     if (target_id < 1 || target_id >= goal.size()) {
         return cmd_vel;
     }
@@ -404,7 +401,7 @@ Velocity computeVelocityGuidelessAGV(const Pose2D& robot, const std::vector<Pose
     // If heading error is large or heading for reverse direction,
     // rotate in place instead of moving forward/backward
     if (std::cos(yaw_err) < std::cos(M_PI / 4.0) || reverse) {
-        std::cerr << "rotate in place" << std::endl;
+        std::cout << "rotate in place" << std::endl;
         const double wz = -(P_yaw * yaw_err);
         cmd_vel.linear = 0.0;
         cmd_vel.angular = std::clamp(wz, -max_wz, max_wz);
