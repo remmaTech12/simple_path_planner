@@ -82,10 +82,24 @@ bool computeCommandForGuidelessAGV(int &rtr_state, size_t &target_index, double 
             target_index++;
             cmd = {0.0, 0.0};
         }
-        else
+        else if (target_index + 1 < path.size())
         {
-            cmd = computeVelocityPurePursuit(robot, path, target_index, true);
+            // to next from current target
+            Pose2D dnc = {path[target_index + 1].x - path[target_index].x,
+                          path[target_index + 1].y - path[target_index].y,
+                          path[target_index + 1].theta - path[target_index].theta};
+            // to robot from current target
+            Pose2D drc = {robot.x - path[target_index].x,
+                          robot.y - path[target_index].y,
+                          robot.theta - path[target_index].theta};
+            // check if inner product is positive
+            double inner_product = dnc.x * drc.x + dnc.y * drc.y;
+            if (inner_product > 0.0)
+            {
+                target_index++;
+            }
         }
+        cmd = computeVelocityPurePursuit(robot, path, target_index, false);
     }
     return is_finished;
 }
@@ -245,21 +259,26 @@ Velocity computeVelocityProportionalControl(const Pose2D& current, const Pose2D&
 
 Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pose2D>& path, size_t target_index, bool allow_backward) {
     Velocity cmd = {0.0, 0.0};
-    const double lookahead_distance = 0.01;
-    const double linear_velocity = 0.3;
+    const double lookahead_distance = 0.5;
+    const double linear_velocity = 1.0;
     const double max_linear = 1.0;
     const double max_angular = M_PI / 2.0;
 
     // Select a target point that is at least lookahead_distance away
+    Pose2D target = path[target_index];
+    std::cerr << target_index << std::endl;
+    /*
     Pose2D target = path.back();
     for (size_t i = target_index; i < path.size(); ++i) {
         double dx = path[i].x - current.x;
         double dy = path[i].y - current.y;
         if (std::hypot(dx, dy) >= lookahead_distance) {
             target = path[i];
+            target_index = i;
             break;
         }
     }
+    */
 
     double dx = target.x - current.x;
     double dy = target.y - current.y;
@@ -281,7 +300,7 @@ Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pos
     double kappa = 2.0 * std::sin(alpha) / lookahead_distance;
 
     double dist_to_target = std::hypot(dx, dy);
-    double linear = linear_velocity * (dist_to_target / lookahead_distance);
+    double linear = linear_velocity; // * (dist_to_target / lookahead_distance);
     linear = std::clamp(linear, 0.0, max_linear);
 
     cmd.linear = linear;
