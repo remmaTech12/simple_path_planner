@@ -27,6 +27,8 @@ int main() {
     // Register SIGINT handler
     std::signal(SIGINT, handle_sigint);
 
+    Motion motion;
+
     // Start and goal information
     std::vector<Pose2D> waypoints = {
         // zig-zag
@@ -114,7 +116,7 @@ int main() {
 
     // Waypoints creation
     std::vector<Pose2D> path;
-    // path = generateReedsSheppPathFromWaypoints(waypoints);
+    // path = motion.generateReedsSheppPathFromWaypoints(waypoints);
     path = waypoints;
 
     while (true) {
@@ -122,16 +124,16 @@ int main() {
         bool is_finished = false;
 
         if (mode == 0) {
-            is_finished = computeCommandForReedsShepp(target_index, position_threshold, angle_threshold,
+            is_finished = motion.computeCommandForReedsShepp(target_index, position_threshold, angle_threshold,
                                                       waypoints, path, robot, dt, path_tracking_mode, cmd);
         } else if (mode == 1) {
-            is_finished = computeCommandForRTR(rtr_state, target_index, position_threshold, angle_threshold,
+            is_finished = motion.computeCommandForRTR(rtr_state, target_index, position_threshold, angle_threshold,
                                                waypoints, path, robot, dt, path_tracking_mode, cmd, false);
         } else if (mode == 2) {
-            is_finished = computeCommandForGuidelessAGV_pprtr(rtr_state, target_index, position_threshold, angle_threshold,
+            is_finished = motion.computeCommandForGuidelessAGV_pprtr(rtr_state, target_index, position_threshold, angle_threshold,
                                                               waypoints, path, robot, dt, path_tracking_mode, cmd);
         } else if (mode == 3) {
-            is_finished = computeCommandForGuidelessAGV(rtr_state, target_index, position_threshold, angle_threshold,
+            is_finished = motion.computeCommandForGuidelessAGV(rtr_state, target_index, position_threshold, angle_threshold,
                                                         waypoints, path, robot, dt, path_tracking_mode, cmd);
         }
 
