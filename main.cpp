@@ -103,7 +103,7 @@ int main() {
                   // 2: guideless AGV with pure pursuit + RTR, 3: guideless AGV with linetrace
     int path_tracking_mode = 1; // 0: P control, 1: Pure pursuit
     double dt = 0.1;
-    double position_threshold = 0.02;
+    double position_threshold = 0.01;
     double angle_threshold = 0.05;
 
     // State

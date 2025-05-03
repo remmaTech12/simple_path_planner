@@ -16,6 +16,7 @@ Pose2D prev_robot_pose_ = {0.0, 0.0, 0.0};
 double i_lat_err = 0.0;
 double i_yaw_err = 0.0;
 int prev_target_id = -1;
+bool is_forward = true;
 
 Velocity computeVelocityProportionalControl(const Pose2D& current, const Pose2D& target);
 Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pose2D>& path, size_t target_id, bool allow_backward = false);
@@ -386,6 +387,7 @@ std::tuple<double, double> calc_error(Pose2D next, Pose2D previous, Pose2D robot
 }
 
 Velocity computeVelocityLinetrace(const Pose2D& robot, const std::vector<Pose2D>& goal, size_t target_id, bool allow_backward) {
+    double sign_vel = is_forward ? 1.0 : -1.0;
     Velocity cmd_vel = {0.0, 0.0};
 
     // Parameters
@@ -394,7 +396,7 @@ Velocity computeVelocityLinetrace(const Pose2D& robot, const std::vector<Pose2D>
     double max_wz = M_PI / 4.0;
     double i_lat_max_err = 1.0;
     double i_yaw_max_err = M_PI;
-    double lookahead_distance = 0.15;
+    double lookahead_distance = is_forward ? 0.15 : -0.15;
     double P_lat = 50.0;
     double I_lat = 5.0;
     double P_yaw = 2.0;
@@ -410,6 +412,8 @@ Velocity computeVelocityLinetrace(const Pose2D& robot, const std::vector<Pose2D>
     if (target_id < 1 || target_id >= goal.size()) {
         return cmd_vel;
     }
+
+    // Accurate tracking in the vicinity of the goal
     if (target_id == goal.size() - 1) {
         max_vx = calc_distance(robot, goal[target_id]);
         min_vx = 0.0;
@@ -421,6 +425,11 @@ Velocity computeVelocityLinetrace(const Pose2D& robot, const std::vector<Pose2D>
     // Calculate lat and yaw error
     double lat_err = std::get<0>(calc_error(goal[target_id], goal[target_id - 1], robot_ahead));
     double yaw_err = std::get<1>(calc_error(goal[target_id], goal[target_id - 1], robot_ahead));
+    if (!is_forward) {
+        lat_err = -lat_err;
+        if (yaw_err > M_PI / 2.0)  yaw_err = M_PI - yaw_err;
+        if (yaw_err < -M_PI / 2.0) yaw_err = -M_PI - yaw_err;
+    }
     i_lat_err += lat_err;
     i_lat_err = std::clamp(i_lat_err, -i_lat_max_err, i_lat_max_err);
     i_yaw_err += yaw_err;
@@ -434,19 +443,22 @@ Velocity computeVelocityLinetrace(const Pose2D& robot, const std::vector<Pose2D>
     // Calculate linear and angular velocities
     constexpr double vx_lat_err_gain = 7.0;
     constexpr double vx_yaw_err_gain = 1.0;
-    double vx = max_vx * std::max(0.0, 1.0 - vx_lat_err_gain * std::abs(lat_err) - vx_yaw_err_gain * std::abs(yaw_err));
-    double wz = -(P_lat * lat_err + I_lat * i_lat_err) - (P_yaw * yaw_err + I_yaw * i_yaw_err);
-    cmd_vel.linear = std::clamp(vx, min_vx, max_vx); // cmd_vel.linear = max_vx;  // simple command
-    cmd_vel.angular = std::clamp(wz, -max_wz, max_wz);
+    const double vx = max_vx * std::max(0.0, 1.0 - vx_lat_err_gain * std::abs(lat_err)
+                                                 - vx_yaw_err_gain * std::abs(yaw_err));
+    const double wz = -(P_lat * lat_err + I_lat * i_lat_err) - (P_yaw * yaw_err + I_yaw * i_yaw_err);
+    cmd_vel.linear = sign_vel * std::clamp(vx, min_vx, max_vx); // cmd_vel.linear = max_vx;  // simple command
+    cmd_vel.angular = sign_vel * std::clamp(wz, -max_wz, max_wz);
 
     // If heading error is large or heading for reverse direction,
     // rotate in place instead of moving forward/backward
-    if (std::cos(yaw_err) < std::cos(M_PI / 4.0) || reverse) {
+    /*
+    if (std::abs(std::cos(yaw_err)) < std::cos(M_PI / 4.0)) {
         std::cout << "rotate in place" << std::endl;
-        const double wz = -(P_yaw * yaw_err);
+        const double wz = sign_vel * -(P_yaw * yaw_err);
         cmd_vel.linear = 0.0;
         cmd_vel.angular = std::clamp(wz, -max_wz, max_wz);
     }
+    */
 
     return cmd_vel;
 }
