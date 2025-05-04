@@ -10,26 +10,64 @@
 #include <tuple>
 namespace ob = ompl::base;
 
-bool rtr_reverse_ = false;
-double rtr_moved_distance_ = 0.0;
-Pose2D prev_robot_pose_ = {0.0, 0.0, 0.0};
-double i_lat_err = 0.0;
-double i_yaw_err = 0.0;
-int prev_target_id = -1;
-bool is_forward = true;
+class Motion {
+public:
+    Motion();
+    
+    // Public methods (referenced from other files)
+    bool computeCommandForReedsShepp(size_t &target_id, double position_threshold, double angle_threshold,
+                                    const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
+                                    Pose2D &robot, double dt, int path_tracking_mode, Velocity &cmd);
+    
+    bool computeCommandForRTR(int &rtr_state, size_t &target_id, double position_threshold, double angle_threshold,
+                              const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
+                              Pose2D &robot, double dt, int path_tracking_mode, Velocity &cmd, bool allow_backward = false);
+    
+    bool computeCommandForGuidelessAGV_pprtr(int &rtr_state, size_t &target_id, double position_threshold, double angle_threshold,
+                                           const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
+                                           Pose2D &robot, double dt, int path_tracking_mode, Velocity &cmd);
+    
+    bool computeCommandForGuidelessAGV(int &rtr_state, size_t &target_id, double position_threshold, double angle_threshold,
+                                      const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
+                                      Pose2D &robot, double dt, int path_tracking_mode, Velocity &cmd);
+    
+    std::vector<Pose2D> generateReedsSheppPathFromWaypoints(const std::vector<Pose2D> &waypoints);
 
-Velocity computeVelocityProportionalControl(const Pose2D& current, const Pose2D& target);
-Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pose2D>& path, size_t target_id, bool allow_backward = false);
-Velocity computeVelocityLinetrace(const Pose2D& robot, const std::vector<Pose2D>& goal, size_t target_id, bool allow_backward = false);
-std::vector<Pose2D> generateReedsSheppPath(Pose2D start, Pose2D goal, double step_size);
-bool computeCommandForRTR(int &rtr_state, size_t &target_id, double position_threshold, double angle_threshold,
-                          const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
-                          Pose2D &robot, double dt, int path_tracking_mode, Velocity &cmd, bool allow_backward);
-double calc_distance(const Pose2D& a, const Pose2D& b);
+private:
+    // Member variables (converted from global variables)
+    bool rtr_reverse_ = false;
+    double rtr_moved_distance_ = 0.0;
+    Pose2D prev_robot_pose_ = {0.0, 0.0, 0.0};
+    double i_lat_err = 0.0;
+    double i_yaw_err = 0.0;
+    int prev_target_id = -1;
+    bool is_forward = true;
+    
+    // Private helper methods
+    Velocity computeVelocityProportionalControl(const Pose2D& current, const Pose2D& target);
+    Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pose2D>& path, size_t target_id, bool allow_backward = false);
+    Velocity computeVelocityLinetrace(const Pose2D& robot, const std::vector<Pose2D>& goal, size_t target_id, bool allow_backward = false);
+    std::vector<Pose2D> generateReedsSheppPath(Pose2D start, Pose2D goal, double step_size = 0.1);
+    double calc_distance(const Pose2D& a, const Pose2D& b);
+    std::tuple<double, double> calc_error(Pose2D next, Pose2D previous, Pose2D robot);
+};
 
-bool computeCommandForReedsShepp(size_t &target_id, double position_threshold, double angle_threshold,
-                                 const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
-                                 Pose2D &robot, double dt, int path_tracking_mode, Velocity &cmd)
+// Constructor implementation
+Motion::Motion() {
+    // Initialize member variables with default values
+    rtr_reverse_ = false;
+    rtr_moved_distance_ = 0.0;
+    prev_robot_pose_ = {0.0, 0.0, 0.0};
+    i_lat_err = 0.0;
+    i_yaw_err = 0.0;
+    prev_target_id = -1;
+    is_forward = true;
+}
+
+// Public methods implementation
+bool Motion::computeCommandForReedsShepp(size_t &target_id, double position_threshold, double angle_threshold,
+                                        const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
+                                        Pose2D &robot, double dt, int path_tracking_mode, Velocity &cmd)
 {
     bool is_finished = false;
     if (target_id >= path.size())
@@ -65,7 +103,7 @@ bool computeCommandForReedsShepp(size_t &target_id, double position_threshold, d
     return is_finished;
 }
 
-bool computeCommandForGuidelessAGV_pprtr(int &rtr_state, size_t &target_id, double position_threshold, double angle_threshold,
+bool Motion::computeCommandForGuidelessAGV_pprtr(int &rtr_state, size_t &target_id, double position_threshold, double angle_threshold,
                                    const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
                                    Pose2D &robot, double dt, int path_tracking_mode, Velocity &cmd)
 {
@@ -97,7 +135,7 @@ bool computeCommandForGuidelessAGV_pprtr(int &rtr_state, size_t &target_id, doub
     return is_finished;
 }
 
-bool computeCommandForGuidelessAGV(int &rtr_state, size_t &target_id, double position_threshold, double angle_threshold,
+bool Motion::computeCommandForGuidelessAGV(int &rtr_state, size_t &target_id, double position_threshold, double angle_threshold,
                                    const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
                                    Pose2D &robot, double dt, int path_tracking_mode, Velocity &cmd)
 {
@@ -157,9 +195,9 @@ bool computeCommandForGuidelessAGV(int &rtr_state, size_t &target_id, double pos
     return false;
 }
 
-bool computeCommandForRTR(int &rtr_state, size_t &target_id, double position_threshold, double angle_threshold,
+bool Motion::computeCommandForRTR(int &rtr_state, size_t &target_id, double position_threshold, double angle_threshold,
                           const std::vector<Pose2D> &waypoints, const std::vector<Pose2D> &path,
-                          Pose2D &robot, double dt, int path_tracking_mode, Velocity &cmd, bool allow_backward = false)
+                          Pose2D &robot, double dt, int path_tracking_mode, Velocity &cmd, bool allow_backward)
 {
     bool is_finished = false;
     double vx = 0.2;
@@ -234,7 +272,7 @@ bool computeCommandForRTR(int &rtr_state, size_t &target_id, double position_thr
     return is_finished;
 }
 
-std::vector<Pose2D> generateReedsSheppPathFromWaypoints(const std::vector<Pose2D> &waypoints) {
+std::vector<Pose2D> Motion::generateReedsSheppPathFromWaypoints(const std::vector<Pose2D> &waypoints) {
     std::vector<Pose2D> path;
     for (size_t i = 0; i < waypoints.size() - 1; ++i)
     {
@@ -254,7 +292,7 @@ std::vector<Pose2D> generateReedsSheppPathFromWaypoints(const std::vector<Pose2D
     return path;
 }
 
-std::vector<Pose2D> generateReedsSheppPath(Pose2D start, Pose2D goal, double step_size = 0.1) {
+std::vector<Pose2D> Motion::generateReedsSheppPath(Pose2D start, Pose2D goal, double step_size) {
     auto space = std::make_shared<ob::ReedsSheppStateSpace>(0.5);
 
     ob::RealVectorBounds bounds(2);
@@ -287,7 +325,7 @@ std::vector<Pose2D> generateReedsSheppPath(Pose2D start, Pose2D goal, double ste
     return result;
 }
 
-Velocity computeVelocityProportionalControl(const Pose2D& current, const Pose2D& target) {
+Velocity Motion::computeVelocityProportionalControl(const Pose2D& current, const Pose2D& target) {
     const double K_linear = 2.0;
     const double K_angular = 2.0;
 
@@ -307,7 +345,7 @@ Velocity computeVelocityProportionalControl(const Pose2D& current, const Pose2D&
     return cmd;
 }
 
-Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pose2D>& path, size_t target_id, bool allow_backward) {
+Velocity Motion::computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pose2D>& path, size_t target_id, bool allow_backward) {
     Velocity cmd = {0.0, 0.0};
     const double lookahead_distance = 0.5;
     const double linear_velocity = 1.0;
@@ -366,11 +404,11 @@ Velocity computeVelocityPurePursuit(const Pose2D& current, const std::vector<Pos
     return cmd;
 }
 
-double calc_distance(const Pose2D& a, const Pose2D& b) {
+double Motion::calc_distance(const Pose2D& a, const Pose2D& b) {
     return std::hypot(a.x - b.x, a.y - b.y);
 }
 
-std::tuple<double, double> calc_error(Pose2D next, Pose2D previous, Pose2D robot) {
+std::tuple<double, double> Motion::calc_error(Pose2D next, Pose2D previous, Pose2D robot) {
     double dpn_x = next.x - previous.x;
     double dpn_y = next.y - previous.y;
     double dpr_x = robot.x - previous.x;
@@ -386,7 +424,7 @@ std::tuple<double, double> calc_error(Pose2D next, Pose2D previous, Pose2D robot
     return {lat, yaw};
 }
 
-Velocity computeVelocityLinetrace(const Pose2D& robot, const std::vector<Pose2D>& goal, size_t target_id, bool allow_backward) {
+Velocity Motion::computeVelocityLinetrace(const Pose2D& robot, const std::vector<Pose2D>& goal, size_t target_id, bool allow_backward) {
     double sign_vel = is_forward ? 1.0 : -1.0;
     Velocity cmd_vel = {0.0, 0.0};
 
