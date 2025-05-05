@@ -42,6 +42,7 @@ private:
     double i_yaw_err = 0.0;
     int prev_target_id = -1;
     bool is_forward = true;
+    bool is_recovery_backward = false;
     
     // Private helper methods
     Velocity computeVelocityProportionalControl(const Pose2D& current, const Pose2D& target);
@@ -62,6 +63,7 @@ Motion::Motion() {
     i_yaw_err = 0.0;
     prev_target_id = -1;
     is_forward = true;
+    is_recovery_backward = false;
 }
 
 // Public methods implementation
@@ -186,9 +188,32 @@ bool Motion::computeCommandForGuidelessAGV(int &rtr_state, size_t &target_id, do
         // check if both inner products are positive
         const double inner_product1 = dpc.x * dpr.x + dpc.y * dpr.y;
         const double inner_product2 = dpc.x * dcr.x + dpc.y * dcr.y;
+        constexpr double recovery_threshold = 0.1;
         if (inner_product1 > 0.0 && inner_product2 > 0.0)
         {
-            target_id++;
+            if (target_id == path.size() - 1)
+            {
+                if (dist > recovery_threshold) {
+                    is_recovery_backward = true;
+                    i_lat_err = 0.0;
+                    i_yaw_err = 0.0;
+                }
+            }
+            else
+            {
+                target_id++;
+            }
+        }
+        if (is_recovery_backward && inner_product2 < 0.0)
+        {
+            if (target_id == path.size() - 1)
+            {
+                if (dist > recovery_threshold) {
+                    is_recovery_backward = false;
+                    i_lat_err = 0.0;
+                    i_yaw_err = 0.0;
+                }
+            }
         }
     }
     cmd = computeVelocityLinetrace(robot, path, target_id, false);
@@ -435,10 +460,23 @@ Velocity Motion::computeVelocityLinetrace(const Pose2D& robot, const std::vector
     double i_lat_max_err = 1.0;
     double i_yaw_max_err = M_PI;
     double lookahead_distance = is_forward ? 0.15 : -0.15;
-    double P_lat = 50.0;
-    double I_lat = 5.0;
+    double P_lat = 10.0;
+    double I_lat = 1.0;
     double P_yaw = 2.0;
     double I_yaw = 1.0;
+
+    // Accurate tracking in the vicinity of the goal
+    if (target_id == goal.size() - 1) {
+        max_vx = calc_distance(robot, goal[target_id]);
+        min_vx = 0.0;
+        lookahead_distance = 0.15;
+        P_lat = 50.0;
+        I_lat = 5.0;
+        if (is_recovery_backward) {
+            P_lat = 10.0;
+            I_lat = 1.0;
+        }
+    }
 
     // Calculate the lookahead point
     Pose2D robot_ahead = robot;
@@ -449,15 +487,6 @@ Velocity Motion::computeVelocityLinetrace(const Pose2D& robot, const std::vector
     std::cout << target_id << std::endl;
     if (target_id < 1 || target_id >= goal.size()) {
         return cmd_vel;
-    }
-
-    // Accurate tracking in the vicinity of the goal
-    if (target_id == goal.size() - 1) {
-        max_vx = calc_distance(robot, goal[target_id]);
-        min_vx = 0.0;
-        lookahead_distance = 0.0;
-        P_lat = 50.0;
-        I_lat = 5.0;
     }
 
     // Calculate lat and yaw error
@@ -481,11 +510,13 @@ Velocity Motion::computeVelocityLinetrace(const Pose2D& robot, const std::vector
     // Calculate linear and angular velocities
     constexpr double vx_lat_err_gain = 7.0;
     constexpr double vx_yaw_err_gain = 1.0;
-    const double vx = max_vx * std::max(0.0, 1.0 - vx_lat_err_gain * std::abs(lat_err)
-                                                 - vx_yaw_err_gain * std::abs(yaw_err));
-    const double wz = -(P_lat * lat_err + I_lat * i_lat_err) - (P_yaw * yaw_err + I_yaw * i_yaw_err);
+    double vx = max_vx * std::max(0.0, 1.0 - vx_lat_err_gain * std::abs(lat_err)
+                                           - vx_yaw_err_gain * std::abs(yaw_err));
+    double wz = -(P_lat * lat_err + I_lat * i_lat_err) - (P_yaw * yaw_err + I_yaw * i_yaw_err);
+    if (is_recovery_backward) { wz = (P_lat * lat_err + I_lat * i_lat_err) - (P_yaw * yaw_err + I_yaw * i_yaw_err); }
     cmd_vel.linear = sign_vel * std::clamp(vx, min_vx, max_vx); // cmd_vel.linear = max_vx;  // simple command
     cmd_vel.angular = sign_vel * std::clamp(wz, -max_wz, max_wz);
+    if (is_recovery_backward) { cmd_vel.linear = -cmd_vel.linear; }
 
     // If heading error is large or heading for reverse direction,
     // rotate in place instead of moving forward/backward
